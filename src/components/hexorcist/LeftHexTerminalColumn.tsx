@@ -3,12 +3,14 @@
 import React, { useRef } from "react";
 import {
   AlertTriangle,
+  Binary,
   Cable,
   Download,
   Flame,
   Pause,
   Play,
   ShieldCheck,
+  Sparkles,
   Terminal,
   Upload,
 } from "lucide-react";
@@ -42,6 +44,8 @@ interface LeftHexTerminalColumnProps {
   onDisconnectExternalSource: () => void;
   onDownloadSampleCsv: () => void;
   onUploadCsvFile: (file: File) => void;
+  onLoadBuiltInSampleCsv: () => void;
+  onOpenDbcInspector: () => void;
 }
 
 export function LeftHexTerminalColumn({
@@ -60,6 +64,8 @@ export function LeftHexTerminalColumn({
   onDisconnectExternalSource,
   onDownloadSampleCsv,
   onUploadCsvFile,
+  onLoadBuiltInSampleCsv,
+  onOpenDbcInspector,
 }: LeftHexTerminalColumnProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const inspected = selectedFrame ?? frames[0] ?? null;
@@ -267,26 +273,44 @@ export function LeftHexTerminalColumn({
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#00E5FF]/45 bg-[#00E5FF]/10 px-3 py-2 font-mono text-xs font-bold text-[#00E5FF] hover:bg-[#00E5FF]/20 cursor-pointer"
         >
           <Cable className="h-4 w-4" />
-          <span>Connect WebSerial Hardware (ELM327 / CAN)</span>
+          <span>Connect USB/Bluetooth OBD-II Adapter</span>
         </button>
 
-        <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={onLoadBuiltInSampleCsv}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#00FF9D]/45 bg-[#00FF9D]/10 px-3 py-2 font-mono text-[11px] font-bold text-[#00FF9D] hover:bg-[#00FF9D]/20 cursor-pointer"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>Load Built-In Sample OBDeleven/VCDS Log</span>
+        </button>
+
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
             onClick={onDownloadSampleCsv}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-2 font-mono text-[11px] text-slate-200 hover:border-[#00FF9D]/50 hover:text-[#00FF9D] cursor-pointer"
+            className="flex items-center justify-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2 py-2 font-mono text-[10px] text-slate-200 hover:border-[#00FF9D]/50 hover:text-[#00FF9D] cursor-pointer"
           >
-            <Download className="h-3.5 w-3.5" />
-            <span>Sample CSV</span>
+            <Download className="h-3 w-3 shrink-0" />
+            <span>100-Row CSV</span>
           </button>
 
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-2 font-mono text-[11px] text-slate-200 hover:border-[#FFB800]/50 hover:text-[#FFB800] cursor-pointer"
+            className="flex items-center justify-center gap-1 rounded-lg border border-white/15 bg-white/5 px-2 py-2 font-mono text-[10px] text-slate-200 hover:border-[#FFB800]/50 hover:text-[#FFB800] cursor-pointer"
           >
-            <Upload className="h-3.5 w-3.5" />
-            <span>Replay CSV Log</span>
+            <Upload className="h-3 w-3 shrink-0" />
+            <span>Drop CSV</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenDbcInspector}
+            className="flex items-center justify-center gap-1 rounded-lg border border-[#00E5FF]/35 bg-[#00E5FF]/10 px-2 py-2 font-mono text-[10px] font-bold text-[#00E5FF] hover:bg-[#00E5FF]/20 cursor-pointer"
+          >
+            <Binary className="h-3 w-3 shrink-0" />
+            <span>.DBC Matrix</span>
           </button>
           <input
             ref={fileInputRef}

@@ -23,6 +23,8 @@ export type VehicleArchitectureId =
   | "AWD_800V_EV"
   | "HEAVY_DIESEL_TOW";
 
+export type SoulProfileId = VehicleArchitectureId | "CUSTOM_VIN_SOUL";
+
 export interface PidDefinition {
   key: PidKey;
   requestMode: "01" | "22";
@@ -649,7 +651,7 @@ export interface MechanicalCursePreset {
 }
 
 export interface VehicleSoulPreset {
-  id: VehicleArchitectureId;
+  id: SoulProfileId;
   codename: string;
   yearMakeModel: string;
   engineSummary: string;

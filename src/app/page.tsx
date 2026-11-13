@@ -5,15 +5,28 @@ import {
   ALL_PID_KEYS,
   MechanicalCursePreset,
   PidKey,
+  SoulProfileId,
   UNIVERSAL_PID_REGISTRY,
   VEHICLE_SOUL_PRESETS,
   VehicleArchitectureId,
+  VehicleSoulPreset,
   buildCANResponseFrame,
   calculateDynoMetrics,
   calculateEscrowRateCents,
-  generateSampleTelemetryCsv,
   parseRawCANFrame,
 } from "@/lib/obd-hex-engine";
+import {
+  TelemetryPlaybackFrame,
+  buildCustomVinSoul,
+  generateSampleCSV,
+  parseTelemetryCSV,
+} from "@/lib/log-and-dbc-engine";
+import {
+  CsvPlaybackScrubberBar,
+  HardwareAndDbcModal,
+  HardwareStudioTab,
+  PlaybackSpeedMultiplier,
+} from "@/components/HardwareAndDbcModal";
 import {
   ConnectionMode,
   DecodedNhtsaVin,
@@ -49,10 +62,9 @@ const nowTimeStr = (): string => {
 };
 
 function buildInitialDynoCurve(
-  vehicleId: VehicleArchitectureId,
+  soul: VehicleSoulPreset,
   lossPct: number
 ): DynoCurvePoint[] {
-  const soul = VEHICLE_SOUL_PRESETS[vehicleId];
   const pts: DynoCurvePoint[] = [];
   let prevSpeed = 52;
 
@@ -84,9 +96,14 @@ function buildInitialDynoCurve(
 }
 
 export default function HexorcistDashboardPage() {
+  const [customVinSoul, setCustomVinSoul] = useState<VehicleSoulPreset | null>(null);
   const [activeVehicleId, setActiveVehicleId] =
-    useState<VehicleArchitectureId>("GERMAN_V6_DSG");
-  const soul = VEHICLE_SOUL_PRESETS[activeVehicleId];
+    useState<SoulProfileId>("GERMAN_V6_DSG");
+  const soul: VehicleSoulPreset =
+    activeVehicleId === "CUSTOM_VIN_SOUL" && customVinSoul
+      ? customVinSoul
+      : VEHICLE_SOUL_PRESETS[activeVehicleId as VehicleArchitectureId] ??
+        VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
 
   const [crtEnabled, setCrtEnabled] = useState<boolean>(true);
   const [connectionMode, setConnectionMode] =
@@ -115,9 +132,20 @@ export default function HexorcistDashboardPage() {
   const [scopeHistory, setScopeHistory] = useState<ScopeSample[]>([]);
 
   const [dynoCurve, setDynoCurve] = useState<DynoCurvePoint[]>(() =>
-    buildInitialDynoCurve("GERMAN_V6_DSG", soul.curses[0].powerLossPct)
+    buildInitialDynoCurve(VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG, soul.curses[0].powerLossPct)
   );
   const [dynoRunning, setDynoRunning] = useState<boolean>(false);
+
+  const [hardwareModalOpen, setHardwareModalOpen] = useState<boolean>(false);
+  const [hardwareStudioTab, setHardwareStudioTab] =
+    useState<HardwareStudioTab>("CSV_REPLAY");
+  const [csvFrames, setCsvFrames] = useState<TelemetryPlaybackFrame[]>([]);
+  const [csvCursor, setCsvCursor] = useState<number>(0);
+  const [csvPlaying, setCsvPlaying] = useState<boolean>(false);
+  const [csvSpeed, setCsvSpeed] = useState<PlaybackSpeedMultiplier>(1);
+  const [csvSourceLabel, setCsvSourceLabel] = useState<string>("OBDeleven / VCDS Sample");
+  const [physicalPortConnected, setPhysicalPortConnected] = useState<boolean>(false);
+  const [loopbackActive, setLoopbackActive] = useState<boolean>(false);
 
   const [udsLogs, setUdsLogs] = useState<UdsHandshakeEntry[]>([
     {
@@ -194,19 +222,68 @@ export default function HexorcistDashboardPage() {
     }));
   }, []);
 
-  // 25Hz (40ms) Virtual ECU & CSV Replay Engine
+  const applyCsvFrameToDashboard = useCallback(
+    (frame: TelemetryPlaybackFrame, currentSoul: VehicleSoulPreset) => {
+      ingestRawFrame(frame.rawHexFrame);
+      setTelemetry((prev) => ({
+        ...prev,
+        "010C": frame.rpm,
+        "010D": frame.speedKmh,
+        "0105": frame.coolantC,
+        "0106": frame.stftPct,
+        "0142": frame.voltageV,
+        [currentSoul.primaryPid]: frame.primarySensorActual,
+      }));
+
+      const scopeTarget =
+        scopePid === currentSoul.primaryPid
+          ? frame.primarySensorTarget
+          : scopePid === "0106"
+          ? 0
+          : currentSoul.baselineTelemetry[scopePid];
+      const scopeActual =
+        scopePid === currentSoul.primaryPid
+          ? frame.primarySensorActual
+          : scopePid === "010C"
+          ? frame.rpm
+          : scopePid === "010D"
+          ? frame.speedKmh
+          : scopePid === "0105"
+          ? frame.coolantC
+          : scopePid === "0106"
+          ? frame.stftPct
+          : scopePid === "0142"
+          ? frame.voltageV
+          : frame.primarySensorActual;
+
+      setScopeHistory((prev) => [
+        ...prev.slice(-49),
+        {
+          tick: `${(frame.timestampMs / 1000).toFixed(1)}s`,
+          target: Number(scopeTarget.toFixed(2)),
+          actual: Number(scopeActual.toFixed(2)),
+        },
+      ]);
+
+      if (frame.activeDtc !== "NONE") {
+        setCustomDtc(frame.activeDtc);
+        const matched =
+          currentSoul.curses.find((c) => c.dtcCode === frame.activeDtc) ??
+          currentSoul.curses[0];
+        setActiveCurse(matched);
+      } else {
+        setActiveCurse(null);
+      }
+    },
+    [ingestRawFrame, scopePid]
+  );
+
+  // 25Hz (40ms) Virtual ECU Engine
   useEffect(() => {
-    if (streamPaused || connectionMode === "WEBSERIAL ELM327") return;
+    if (streamPaused || connectionMode !== "VIRTUAL ECU 25Hz") return;
 
     const interval = setInterval(() => {
       const step = tickCounterRef.current++;
-
-      if (connectionMode === "CSV REPLAY" && csvQueueRef.current.length > 0) {
-        const nextFrame = csvQueueRef.current[step % csvQueueRef.current.length];
-        ingestRawFrame(nextFrame);
-        return;
-      }
-
       const pid = ALL_PID_KEYS[step % ALL_PID_KEYS.length];
       const def = UNIVERSAL_PID_REGISTRY[pid];
       const targetVal = soul.baselineTelemetry[pid];
@@ -218,8 +295,7 @@ export default function HexorcistDashboardPage() {
       const wave =
         Math.sin(step * 0.24) * Math.max(def.tolerance * 1.5, Math.abs(baseActual) * 0.018);
       const noisyVal = Math.min(def.max, Math.max(def.min, baseActual + wave));
-      const frame = buildCANResponseFrame(pid, noisyVal);
-      ingestRawFrame(frame);
+      ingestRawFrame(buildCANResponseFrame(pid, noisyVal));
 
       if (step % 2 === 0) {
         const scopeDef = UNIVERSAL_PID_REGISTRY[scopePid];
@@ -251,12 +327,38 @@ export default function HexorcistDashboardPage() {
     return () => clearInterval(interval);
   }, [streamPaused, connectionMode, soul, activeCurse, scopePid, ingestRawFrame]);
 
-  const handleSelectVehicle = (id: VehicleArchitectureId) => {
-    const nextSoul = VEHICLE_SOUL_PRESETS[id];
+  // Synchronized 1x / 2x / 5x CSV Scrubber Replay Engine
+  useEffect(() => {
+    if (
+      connectionMode !== "CSV REPLAY" ||
+      !csvPlaying ||
+      streamPaused ||
+      csvFrames.length === 0
+    ) {
+      return;
+    }
+    const stepDelayMs = Math.max(20, Math.round(100 / csvSpeed));
+    const timer = setInterval(() => {
+      setCsvCursor((prev) => {
+        const next = (prev + 1) % csvFrames.length;
+        applyCsvFrameToDashboard(csvFrames[next], soul);
+        return next;
+      });
+    }, stepDelayMs);
+
+    return () => clearInterval(timer);
+  }, [connectionMode, csvPlaying, streamPaused, csvFrames, csvSpeed, soul, applyCsvFrameToDashboard]);
+
+  const handleSelectVehicle = (id: SoulProfileId) => {
+    const nextSoul =
+      id === "CUSTOM_VIN_SOUL" && customVinSoul
+        ? customVinSoul
+        : VEHICLE_SOUL_PRESETS[id as VehicleArchitectureId] ??
+          VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
     const defaultCurse = nextSoul.curses[0];
     setActiveVehicleId(id);
     setActiveVin(nextSoul.defaultVin);
-    setDecodedVinInfo(null);
+    if (id !== "CUSTOM_VIN_SOUL") setDecodedVinInfo(null);
     setActiveCurse(defaultCurse);
     setCustomDtc(defaultCurse.dtcCode);
     setScopePid(nextSoul.primaryPid);
@@ -266,36 +368,60 @@ export default function HexorcistDashboardPage() {
     });
     setScopeHistory([]);
     setAutopsyResult(null);
-    setDynoCurve(buildInitialDynoCurve(id, defaultCurse.powerLossPct));
+    setDynoCurve(buildInitialDynoCurve(nextSoul, defaultCurse.powerLossPct));
+  };
+
+  const handleBindCustomVinSoul = (decoded: DecodedNhtsaVin) => {
+    const boundSoul = buildCustomVinSoul(decoded);
+    const defaultCurse = boundSoul.curses[0];
+    setCustomVinSoul(boundSoul);
+    setActiveVehicleId("CUSTOM_VIN_SOUL");
+    setActiveVin(boundSoul.defaultVin);
+    setDecodedVinInfo(decoded);
+    setActiveCurse(defaultCurse);
+    setCustomDtc(defaultCurse.dtcCode);
+    setScopePid(boundSoul.primaryPid);
+    setTelemetry({
+      ...boundSoul.baselineTelemetry,
+      ...(defaultCurse.telemetryOverrides as Partial<Record<PidKey, number>>),
+    });
+    setScopeHistory([]);
+    setAutopsyResult(null);
+    setDynoCurve(buildInitialDynoCurve(boundSoul, defaultCurse.powerLossPct));
+    setWebSerialStatus(
+      `Bound Custom VIN Soul: ${boundSoul.yearMakeModel} (${boundSoul.defaultVin})`
+    );
   };
 
   const handleCastCurse = (curse: MechanicalCursePreset) => {
     setActiveCurse(curse);
     setCustomDtc(curse.dtcCode);
     setScopePid(curse.targetPid);
-    setDynoCurve(buildInitialDynoCurve(activeVehicleId, curse.powerLossPct));
+    setDynoCurve(buildInitialDynoCurve(soul, curse.powerLossPct));
   };
 
   const handleClearCurses = () => {
     setActiveCurse(null);
     setTelemetry({ ...soul.baselineTelemetry });
-    setDynoCurve(buildInitialDynoCurve(activeVehicleId, 0));
+    setDynoCurve(buildInitialDynoCurve(soul, 0));
   };
 
-  const handleConnectWebSerial = async () => {
+  const handleConnectPhysicalSerial = async (): Promise<boolean> => {
     try {
       const nav = navigator as Navigator & {
         serial?: { requestPort: () => Promise<WebSerialPortLike> };
       };
       if (!nav.serial) {
         setWebSerialStatus(
-          "WebSerial unavailable in this browser — using 25Hz Virtual ECU"
+          "WebSerial API unavailable — switch to Virtual Loopback COM Port"
         );
-        return;
+        return false;
       }
       const port = await nav.serial.requestPort();
       await port.open({ baudRate: 38400 });
       serialPortRef.current = port;
+      setPhysicalPortConnected(true);
+      setLoopbackActive(false);
       setConnectionMode("WEBSERIAL ELM327");
       setWebSerialStatus("ELM327 Connected @ 38400 baud (ISO 15765-4 CAN 500k)");
 
@@ -326,6 +452,7 @@ export default function HexorcistDashboardPage() {
               }
             }
           } catch {
+            setPhysicalPortConnected(false);
             setWebSerialStatus("WebSerial link closed — Virtual ECU resumed");
             setConnectionMode("VIRTUAL ECU 25Hz");
           } finally {
@@ -333,13 +460,34 @@ export default function HexorcistDashboardPage() {
           }
         })();
       }
+      return true;
     } catch (err) {
       setWebSerialStatus(
         err instanceof Error
-          ? `WebSerial: ${err.message}`
-          : "WebSerial port selection cancelled"
+          ? `WebSerial: ${err.message} — Virtual Loopback Ready`
+          : "Port selection cancelled — Virtual Loopback Ready"
       );
+      return false;
     }
+  };
+
+  const handleSendPhysicalSerialCommand = async (cmd: string): Promise<boolean> => {
+    const port = serialPortRef.current;
+    if (!port?.writable) return false;
+    try {
+      const writer = port.writable.getWriter();
+      await writer.write(new TextEncoder().encode(`${cmd}\r`));
+      writer.releaseLock();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const handleActivateLoopbackPort = () => {
+    setPhysicalPortConnected(false);
+    setLoopbackActive(true);
+    setWebSerialStatus("Virtual Loopback COM4 Active (ELM327 ISO 15765-4 500kbaud)");
   };
 
   const handleDisconnectExternal = async () => {
@@ -350,43 +498,85 @@ export default function HexorcistDashboardPage() {
     }
     serialPortRef.current = null;
     csvQueueRef.current = [];
+    setPhysicalPortConnected(false);
+    setLoopbackActive(false);
+    setCsvPlaying(false);
     setConnectionMode("VIRTUAL ECU 25Hz");
     setWebSerialStatus("Returned to 25Hz Virtual ECU Telemetry");
   };
 
+  const startCsvPlaybackSession = (
+    parsedFrames: TelemetryPlaybackFrame[],
+    label: string
+  ) => {
+    if (parsedFrames.length === 0) {
+      setWebSerialStatus(`No valid telemetry rows found in ${label}`);
+      return;
+    }
+    setCsvFrames(parsedFrames);
+    setCsvSourceLabel(label);
+    setCsvCursor(0);
+    setCsvPlaying(true);
+    setScopePid(soul.primaryPid);
+    setConnectionMode("CSV REPLAY");
+    const seedWindow = parsedFrames.slice(0, 12).map((f) => ({
+      tick: `${(f.timestampMs / 1000).toFixed(1)}s`,
+      target: Number(f.primarySensorTarget.toFixed(2)),
+      actual: Number(f.primarySensorActual.toFixed(2)),
+    }));
+    setScopeHistory(seedWindow);
+    applyCsvFrameToDashboard(parsedFrames[0], soul);
+    setWebSerialStatus(`Replaying ${parsedFrames.length} frames from ${label}`);
+  };
+
+  const handleSeekCsv = (index: number) => {
+    if (csvFrames.length === 0) return;
+    const clamped = Math.min(csvFrames.length - 1, Math.max(0, index));
+    setCsvCursor(clamped);
+    const startWin = Math.max(0, clamped - 30);
+    const windowSamples: ScopeSample[] = csvFrames
+      .slice(startWin, clamped + 1)
+      .map((f) => ({
+        tick: `${(f.timestampMs / 1000).toFixed(1)}s`,
+        target: Number(f.primarySensorTarget.toFixed(2)),
+        actual: Number(f.primarySensorActual.toFixed(2)),
+      }));
+    setScopeHistory(windowSamples);
+    applyCsvFrameToDashboard(csvFrames[clamped], soul);
+  };
+
+  const handleLoadBuiltInSampleCsv = () => {
+    const csv = generateSampleCSV(activeVehicleId, customVinSoul);
+    const parsedFrames = parseTelemetryCSV(csv);
+    startCsvPlaybackSession(
+      parsedFrames,
+      `OBDeleven/VCDS ${soul.codename} WOT Pull`
+    );
+  };
+
   const handleDownloadSampleCsv = () => {
-    const csv = generateSampleTelemetryCsv(activeVehicleId);
+    const csv = generateSampleCSV(activeVehicleId, customVinSoul);
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `hexorcist_${activeVehicleId.toLowerCase()}_can_log.csv`;
+    a.download = `hexorcist_${soul.codename.toLowerCase()}_100row_wot_log.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    setWebSerialStatus(`Exported 48-frame CAN CSV log for ${soul.codename}`);
+    setWebSerialStatus(`Downloaded 100-row WOT CSV log for ${soul.codename}`);
   };
 
   const handleUploadCsvFile = async (file: File) => {
     const text = await file.text();
-    const extracted: string[] = [];
-    for (const line of text.split(/\r?\n/)) {
-      const match = line.match(/7E[8-F]\s+[0-9A-Fa-f]{2}(?:\s+[0-9A-Fa-f]{2}){4,7}/);
-      if (match) extracted.push(match[0].toUpperCase());
-    }
-    if (extracted.length === 0) {
-      setWebSerialStatus("CSV contained no valid 7E8 ISO 15765-4 hex frames");
-      return;
-    }
-    csvQueueRef.current = extracted;
-    setConnectionMode("CSV REPLAY");
-    setWebSerialStatus(`Replaying ${extracted.length} CAN frames from ${file.name}`);
+    const parsedFrames = parseTelemetryCSV(text);
+    startCsvPlaybackSession(parsedFrames, file.name);
   };
 
   const handleRunDynoPull = () => {
     if (dynoRunning) return;
     setDynoRunning(true);
     const fullCurve = buildInitialDynoCurve(
-      activeVehicleId,
+      soul,
       activeCurse ? activeCurse.powerLossPct : 0
     );
     setDynoCurve([]);
@@ -494,6 +684,7 @@ export default function HexorcistDashboardPage() {
           rawCanFrame: targetFrame,
           dtcCode: activeCurse?.dtcCode ?? customDtc,
           telemetrySnapshot: telemetry,
+          customSoul: activeVehicleId === "CUSTOM_VIN_SOUL" ? customVinSoul ?? undefined : undefined,
         }),
       });
       const json = (await res.json()) as DiagnoseResponsePayload;
@@ -562,6 +753,12 @@ export default function HexorcistDashboardPage() {
       <TopCommandBar
         activeVehicleId={activeVehicleId}
         onSelectVehicle={handleSelectVehicle}
+        customVinSoul={customVinSoul}
+        onBindCustomVinSoul={handleBindCustomVinSoul}
+        onOpenHardwareStudio={(tab) => {
+          setHardwareStudioTab(tab);
+          setHardwareModalOpen(true);
+        }}
         connectionMode={connectionMode}
         crtEnabled={crtEnabled}
         onToggleCrt={() => setCrtEnabled((v) => !v)}
@@ -574,7 +771,22 @@ export default function HexorcistDashboardPage() {
         hasActiveFault={Boolean(activeCurse)}
       />
 
-      <main className="mx-auto max-w-[1840px] px-4 py-4">
+      <main className="mx-auto max-w-[1840px] px-4 py-4 space-y-4">
+        {connectionMode === "CSV REPLAY" && csvFrames.length > 0 && (
+          <CsvPlaybackScrubberBar
+            frames={csvFrames}
+            cursor={csvCursor}
+            playing={csvPlaying}
+            speed={csvSpeed}
+            sourceLabel={csvSourceLabel}
+            primaryPid={soul.primaryPid}
+            onSeek={handleSeekCsv}
+            onTogglePlay={() => setCsvPlaying((p) => !p)}
+            onChangeSpeed={setCsvSpeed}
+            onExitReplay={handleDisconnectExternal}
+          />
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           <div className="lg:col-span-3">
             <LeftHexTerminalColumn
@@ -589,10 +801,18 @@ export default function HexorcistDashboardPage() {
               onClearCurses={handleClearCurses}
               connectionMode={connectionMode}
               webSerialStatus={webSerialStatus}
-              onConnectWebSerial={handleConnectWebSerial}
+              onConnectWebSerial={() => {
+                setHardwareStudioTab("WEBSERIAL_DRAWER");
+                setHardwareModalOpen(true);
+              }}
               onDisconnectExternalSource={handleDisconnectExternal}
               onDownloadSampleCsv={handleDownloadSampleCsv}
               onUploadCsvFile={handleUploadCsvFile}
+              onLoadBuiltInSampleCsv={handleLoadBuiltInSampleCsv}
+              onOpenDbcInspector={() => {
+                setHardwareStudioTab("DBC_INSPECTOR");
+                setHardwareModalOpen(true);
+              }}
             />
           </div>
 
@@ -640,6 +860,37 @@ export default function HexorcistDashboardPage() {
           </div>
         </div>
       </main>
+
+      <HardwareAndDbcModal
+        open={hardwareModalOpen}
+        activeTab={hardwareStudioTab}
+        onChangeTab={setHardwareStudioTab}
+        onClose={() => setHardwareModalOpen(false)}
+        activeVehicleId={activeVehicleId}
+        soul={soul}
+        telemetry={telemetry}
+        activeDtc={activeCurse?.dtcCode ?? null}
+        activeVin={activeVin}
+        csvFrames={csvFrames}
+        csvCursor={csvCursor}
+        csvPlaying={csvPlaying}
+        csvSpeed={csvSpeed}
+        csvSourceLabel={csvSourceLabel}
+        onSeekCsv={handleSeekCsv}
+        onTogglePlayCsv={() => setCsvPlaying((p) => !p)}
+        onChangeSpeedCsv={setCsvSpeed}
+        onLoadBuiltInSampleCsv={handleLoadBuiltInSampleCsv}
+        onDownloadSampleCsv={handleDownloadSampleCsv}
+        onUploadCsvFile={handleUploadCsvFile}
+        physicalPortConnected={physicalPortConnected}
+        loopbackActive={loopbackActive}
+        webSerialStatus={webSerialStatus}
+        onConnectPhysicalSerial={handleConnectPhysicalSerial}
+        onActivateLoopbackPort={handleActivateLoopbackPort}
+        onSendPhysicalSerialCommand={handleSendPhysicalSerialCommand}
+        onIngestLoopbackFrame={ingestRawFrame}
+        onClearFaultsFromTerminal={handleClearCurses}
+      />
     </div>
   );
 }

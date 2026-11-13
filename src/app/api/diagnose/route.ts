@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 import {
+  SoulProfileId,
   VEHICLE_SOUL_PRESETS,
   VehicleArchitectureId,
+  VehicleSoulPreset,
   inspectDTCBitmask,
   parseRawCANFrame,
 } from "@/lib/obd-hex-engine";
 
 export interface DiagnoseRequestPayload {
-  vehicleId?: VehicleArchitectureId;
+  vehicleId?: SoulProfileId;
   vin?: string;
   rawCanFrame?: string;
   dtcCode?: string;
   telemetrySnapshot?: Record<string, number>;
+  customSoul?: VehicleSoulPreset;
 }
 
 export interface DiagnoseResponsePayload {
@@ -31,14 +34,13 @@ export interface DiagnoseResponsePayload {
 }
 
 function buildFallbackAutopsy(
-  vehicleId: VehicleArchitectureId,
+  soul: VehicleSoulPreset,
   vin: string,
   rawCanFrame: string,
   dtcCode: string,
   project: string,
   location: string
 ): DiagnoseResponsePayload {
-  const soul = VEHICLE_SOUL_PRESETS[vehicleId] ?? VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
   const safeDtc = /^[PCBU][0-3][0-9A-F]{3}$/i.test(dtcCode.trim())
     ? dtcCode.trim().toUpperCase()
     : soul.curses[0].dtcCode;
@@ -53,7 +55,7 @@ function buildFallbackAutopsy(
     : `Captured frame "${rawCanFrame}".`;
 
   return {
-    rootCause: `[VIN ${vin}] ${curse.mechanicalExplanation} ${frameNote}`,
+    rootCause: `[VIN ${vin} // ${soul.yearMakeModel}] ${curse.mechanicalExplanation} ${frameNote}`,
     oemPartName: curse.oemPartName,
     oemPartNumber: curse.oemPartNumber,
     estimatedCostUsd: curse.estimatedCostUsd,
@@ -79,17 +81,18 @@ export async function POST(req: NextRequest) {
     body = {};
   }
 
-  const vehicleId: VehicleArchitectureId =
-    body.vehicleId && body.vehicleId in VEHICLE_SOUL_PRESETS
-      ? body.vehicleId
-      : "GERMAN_V6_DSG";
-  const soul = VEHICLE_SOUL_PRESETS[vehicleId];
+  const soul: VehicleSoulPreset =
+    body.vehicleId === "CUSTOM_VIN_SOUL" && body.customSoul?.curses?.length
+      ? body.customSoul
+      : body.vehicleId && body.vehicleId in VEHICLE_SOUL_PRESETS
+      ? VEHICLE_SOUL_PRESETS[body.vehicleId as VehicleArchitectureId]
+      : VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
   const vin = (body.vin || soul.defaultVin).trim().toUpperCase();
   const dtcCode = (body.dtcCode || soul.curses[0].dtcCode).trim().toUpperCase();
   const rawCanFrame = body.rawCanFrame || "7E8 05 62 F4 0A 09 2E A1";
 
   const fallback = buildFallbackAutopsy(
-    vehicleId,
+    soul,
     vin,
     rawCanFrame,
     dtcCode,
