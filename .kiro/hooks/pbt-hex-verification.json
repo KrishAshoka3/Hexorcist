@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "CAN-Bus Hex Property-Based Test Verification",
+      "description": "Runs fast-check property-based tests automatically whenever core hex engine or escrow files are saved.",
+      "trigger": "PostFileSave",
+      "matcher": "src/lib/.*\\.(ts|tsx)$",
+      "action": {
+        "type": "command",
+        "command": "npx vitest run src/lib/obd-hex.test.ts"
+      }
+    }
+  ]
+}

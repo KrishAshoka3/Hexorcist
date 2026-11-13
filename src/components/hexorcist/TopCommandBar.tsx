@@ -1,0 +1,323 @@
+"use client";
+
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Cpu,
+  Monitor,
+  Radio,
+  Search,
+  ShieldAlert,
+  Sparkles,
+  X,
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
+import {
+  VEHICLE_SOUL_LIST,
+  VehicleArchitectureId,
+} from "@/lib/obd-hex-engine";
+
+export type ConnectionMode = "VIRTUAL ECU 25Hz" | "WEBSERIAL ELM327" | "CSV REPLAY";
+
+export interface DecodedNhtsaVin {
+  vin: string;
+  make: string;
+  model: string;
+  modelYear: string;
+  bodyClass: string;
+  engineInfo: string;
+  fuelType: string;
+  driveType: string;
+  plantInfo: string;
+}
+
+interface TopCommandBarProps {
+  activeVehicleId: VehicleArchitectureId;
+  onSelectVehicle: (id: VehicleArchitectureId) => void;
+  connectionMode: ConnectionMode;
+  crtEnabled: boolean;
+  onToggleCrt: () => void;
+  activeVin: string;
+  decodedVinInfo: DecodedNhtsaVin | null;
+  onApplyVin: (vin: string, decoded: DecodedNhtsaVin | null) => void;
+  hasActiveFault: boolean;
+}
+
+export function TopCommandBar({
+  activeVehicleId,
+  onSelectVehicle,
+  connectionMode,
+  crtEnabled,
+  onToggleCrt,
+  activeVin,
+  decodedVinInfo,
+  onApplyVin,
+  hasActiveFault,
+}: TopCommandBarProps) {
+  const [vinModalOpen, setVinModalOpen] = useState(false);
+  const [vinInput, setVinInput] = useState(activeVin);
+  const [vinLoading, setVinLoading] = useState(false);
+  const [vinError, setVinError] = useState<string | null>(null);
+  const [modalDecoded, setModalDecoded] = useState<DecodedNhtsaVin | null>(decodedVinInfo);
+
+  const openModal = () => {
+    setVinInput(activeVin);
+    setModalDecoded(decodedVinInfo);
+    setVinError(null);
+    setVinModalOpen(true);
+  };
+
+  const handleDecodeVin = async (targetVin?: string) => {
+    const cleanVin = (targetVin ?? vinInput).trim().toUpperCase();
+    setVinInput(cleanVin);
+    if (cleanVin.length !== 17) {
+      setVinError("Enter a valid 17-character ISO 3779 VIN.");
+      return;
+    }
+
+    setVinLoading(true);
+    setVinError(null);
+    try {
+      const res = await fetch(
+        `https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(
+          cleanVin
+        )}?format=json`
+      );
+      if (!res.ok) throw new Error(`NHTSA HTTP ${res.status}`);
+      const data = await res.json();
+      const row = data?.Results?.[0];
+      if (!row) throw new Error("No NHTSA vPIC record returned.");
+
+      const parsed: DecodedNhtsaVin = {
+        vin: cleanVin,
+        make: row.Make || "OEM",
+        model: row.Model || "CHASSIS",
+        modelYear: row.ModelYear || "2025",
+        bodyClass: row.BodyClass || "Performance Chassis",
+        engineInfo:
+          [
+            row.DisplacementL ? `${row.DisplacementL}L` : "",
+            row.EngineCylinders ? `${row.EngineCylinders}-Cyl` : "",
+            row.EngineHP ? `${row.EngineHP} HP` : "",
+          ]
+            .filter(Boolean)
+            .join(" ") || "High-Output Powertrain",
+        fuelType: row.FuelTypePrimary || "Gasoline / HV Electric",
+        driveType: row.DriveType || "AWD / RWD",
+        plantInfo:
+          [row.PlantCity, row.PlantCountry].filter(Boolean).join(", ") || "Global Assembly",
+      };
+      setModalDecoded(parsed);
+      onApplyVin(cleanVin, parsed);
+    } catch (err) {
+      setVinError(err instanceof Error ? err.message : "Failed to reach NHTSA vPIC API.");
+    } finally {
+      setVinLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#06070A]/92 backdrop-blur-xl">
+        <div className="mx-auto max-w-[1840px] px-4 py-3 space-y-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <motion.div
+                animate={{ scale: hasActiveFault ? [1, 1.06, 1] : [1, 1.02, 1] }}
+                transition={{ duration: 1.8, repeat: Infinity }}
+                className={`flex h-10 w-10 items-center justify-center rounded-lg border ${
+                  hasActiveFault
+                    ? "border-[#FF1E42]/70 bg-[#FF1E42]/15 text-[#FF1E42] crimson-glow"
+                    : "border-[#00FF9D]/50 bg-[#00FF9D]/10 text-[#00FF9D] phosphor-glow"
+                }`}
+              >
+                {hasActiveFault ? <ShieldAlert className="h-5 w-5" /> : <Cpu className="h-5 w-5" />}
+              </motion.div>
+
+              <div>
+                <motion.h1
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="font-mono text-sm sm:text-base font-bold tracking-wider text-white"
+                >
+                  HEXORCIST <span className="text-[#00FF9D]">{"//"}</span>{" "}
+                  <span className="text-[#00E5FF]">UNIVERSAL CAN-BUS &amp; FINTECH CHIMERA</span>
+                </motion.h1>
+                <p className="font-mono text-[11px] text-slate-400">
+                  SAE J1979 OBD-II + ISO 14229 UDS • VERTEX AI NECROMANCER • REPAIR ESCROW LEDGER
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                className={`flex items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-xs ${
+                  connectionMode === "WEBSERIAL ELM327"
+                    ? "border-[#00E5FF]/50 bg-[#00E5FF]/10 text-[#00E5FF]"
+                    : connectionMode === "CSV REPLAY"
+                    ? "border-[#FFB800]/50 bg-[#FFB800]/10 text-[#FFB800]"
+                    : "border-[#00FF9D]/40 bg-[#00FF9D]/10 text-[#00FF9D]"
+                }`}
+              >
+                <span className="h-2 w-2 rounded-full bg-current animate-pulse" />
+                <Radio className="h-3.5 w-3.5" />
+                <span>{connectionMode}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={openModal}
+                className="flex items-center gap-1.5 rounded-md border border-[#00E5FF]/40 bg-[#0B0E14] px-3 py-1.5 font-mono text-xs text-[#00E5FF] transition hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 cursor-pointer"
+              >
+                <Search className="h-3.5 w-3.5" />
+                <span>VIN: {activeVin}</span>
+                <span className="rounded bg-[#00E5FF]/15 px-1.5 py-0.5 text-[10px]">NHTSA</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onToggleCrt}
+                className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-xs transition cursor-pointer ${
+                  crtEnabled
+                    ? "border-[#00FF9D]/60 bg-[#00FF9D]/15 text-[#00FF9D]"
+                    : "border-white/15 bg-[#0B0E14] text-slate-400 hover:text-white"
+                }`}
+              >
+                <Monitor className="h-3.5 w-3.5" />
+                <span>CRT {crtEnabled ? "ON" : "OFF"}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Vehicle Soul Switcher */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 pt-1">
+            {VEHICLE_SOUL_LIST.map((soul) => {
+              const active = soul.id === activeVehicleId;
+              return (
+                <button
+                  key={soul.id}
+                  type="button"
+                  onClick={() => onSelectVehicle(soul.id)}
+                  className={`flex flex-col items-start rounded-lg border px-3 py-2 text-left transition cursor-pointer ${
+                    active
+                      ? "border-[#00FF9D]/70 bg-[#00FF9D]/10 phosphor-glow"
+                      : "border-white/10 bg-[#0B0E14]/80 hover:border-white/25 hover:bg-white/[0.04]"
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between font-mono text-xs font-bold">
+                    <span className={active ? "text-[#00FF9D]" : "text-white"}>
+                      {soul.codename}
+                    </span>
+                    <span className="text-[10px] text-[#00E5FF]">PID {soul.primaryPid}</span>
+                  </div>
+                  <span className="mt-0.5 line-clamp-1 text-[11px] text-slate-400">
+                    {soul.yearMakeModel}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </header>
+      <AnimatePresence>
+        {vinModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-xl rounded-xl border border-[#00E5FF]/40 bg-[#0A0D14] p-5 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2 font-mono text-sm font-bold text-[#00E5FF]">
+                  <Sparkles className="h-4 w-4" />
+                  <span>LIVE US DOT NHTSA vPIC 17-DIGIT VIN DECODER</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setVinModalOpen(false)}
+                  className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    maxLength={17}
+                    value={vinInput}
+                    onChange={(e) => setVinInput(e.target.value.toUpperCase())}
+                    placeholder="Enter 17-character VIN (e.g. WAUDGAFL5EA049218)"
+                    className="flex-1 rounded-lg border border-white/15 bg-[#050608] px-3 py-2 font-mono text-sm uppercase text-white outline-none focus:border-[#00E5FF]"
+                  />
+                  <button
+                    type="button"
+                    disabled={vinLoading}
+                    onClick={() => handleDecodeVin()}
+                    className="flex items-center gap-2 rounded-lg bg-[#00E5FF] px-4 py-2 font-mono text-xs font-bold text-[#06070A] hover:bg-[#00E5FF]/90 disabled:opacity-50 cursor-pointer"
+                  >
+                    {vinLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    <span>DECODE LIVE</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {VEHICLE_SOUL_LIST.map((preset) => (
+                    <button
+                      key={preset.defaultVin}
+                      type="button"
+                      onClick={() => handleDecodeVin(preset.defaultVin)}
+                      className="rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-[10px] text-slate-300 hover:border-[#00FF9D]/50 hover:text-[#00FF9D] cursor-pointer"
+                    >
+                      {preset.codename}: {preset.defaultVin}
+                    </button>
+                  ))}
+                </div>
+
+                {vinError && (
+                  <div className="rounded-lg border border-[#FF1E42]/40 bg-[#FF1E42]/10 p-2.5 font-mono text-xs text-[#FF6B81]">
+                    {vinError}
+                  </div>
+                )}
+
+                {modalDecoded && (
+                  <div className="rounded-lg border border-[#00FF9D]/30 bg-[#05070B] p-3.5 font-mono text-xs space-y-2">
+                    <div className="flex items-center justify-between text-[#00FF9D]">
+                      <span className="flex items-center gap-1.5 font-bold">
+                        <CheckCircle2 className="h-4 w-4" />
+                        {modalDecoded.modelYear} {modalDecoded.make} {modalDecoded.model}
+                      </span>
+                      <span className="text-[10px] text-slate-400">{modalDecoded.vin}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
+                      <div>
+                        <span className="text-slate-500">BODY:</span> {modalDecoded.bodyClass}
+                      </div>
+                      <div>
+                        <span className="text-slate-500">ENGINE:</span> {modalDecoded.engineInfo}
+                      </div>
+                      <div>
+                        <span className="text-slate-500">FUEL:</span> {modalDecoded.fuelType}
+                      </div>
+                      <div>
+                        <span className="text-slate-500">PLANT:</span> {modalDecoded.plantInfo}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}

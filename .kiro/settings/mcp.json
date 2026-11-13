@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "nhtsa-vin-decoder": {
+      "command": "node",
+      "args": ["mcp-nhtsa-server/index.mjs"],
+      "env": {},
+      "disabled": false,
+      "autoApprove": ["decode_vin"]
+    }
+  }
+}
