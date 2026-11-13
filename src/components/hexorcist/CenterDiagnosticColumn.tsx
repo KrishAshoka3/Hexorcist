@@ -1,8 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   Activity,
+  ChevronDown,
+  ChevronUp,
   Gauge,
   Play,
   TerminalSquare,
@@ -50,6 +52,9 @@ export interface UdsHandshakeEntry {
 }
 
 interface CenterDiagnosticColumnProps {
+  viewMode: "FOCUSED" | "PRO";
+  activeWorkflowStep?: 1 | 2 | 3;
+  tourSpotlightPanel?: string | null;
   activeTab: CenterTabId;
   onSelectTab: (tab: CenterTabId) => void;
   soul: VehicleSoulPreset;
@@ -79,6 +84,9 @@ const EIGHT_GAUGE_PIDS: PidKey[] = [
 ];
 
 export function CenterDiagnosticColumn({
+  viewMode,
+  activeWorkflowStep,
+  tourSpotlightPanel,
   activeTab,
   onSelectTab,
   soul,
@@ -95,10 +103,24 @@ export function CenterDiagnosticColumn({
   udsLogs,
   onDispatchUdsCommand,
 }: CenterDiagnosticColumnProps) {
+  const [showAllChannelsInFocused, setShowAllChannelsInFocused] = useState(false);
   const scopeDef = UNIVERSAL_PID_REGISTRY[scopePid];
+  const showAllEight = viewMode === "PRO" || showAllChannelsInFocused;
+
+  const isTourTarget =
+    tourSpotlightPanel === "OSCILLOSCOPE" || tourSpotlightPanel === "UDS_EXORCISM";
+  const isDimmed = Boolean(tourSpotlightPanel && !isTourTarget);
+  const isWorkflowUdsHighlight =
+    !tourSpotlightPanel && viewMode === "FOCUSED" && activeWorkflowStep === 3 && activeTab === "UDS_TERMINAL";
 
   return (
-    <section className="flex flex-col gap-4">
+    <section
+      className={`flex flex-col gap-4 transition-all duration-300 ${
+        isTourTarget || isWorkflowUdsHighlight
+          ? "rounded-2xl ring-2 ring-[#00FF9D]/70 shadow-[0_0_38px_rgba(0,255,157,0.28)] p-1"
+          : ""
+      } ${isDimmed ? "opacity-45" : "opacity-100"}`}
+    >
       {/* Mode Switcher Tabs */}
       <div className="grid grid-cols-3 gap-2 rounded-xl border border-white/10 bg-[#0A0D14]/90 p-1.5">
         <button
@@ -157,9 +179,9 @@ export function CenterDiagnosticColumn({
 
               <div className="flex flex-wrap gap-1">
                 {(["22F40A", "221140", "22E001", "22D100", "010C", "0106"] as PidKey[]).map(
-                  (pid) => (
+                  (pid, idx) => (
                     <button
-                      key={pid}
+                      key={`${pid}-${idx}`}
                       type="button"
                       onClick={() => onSelectScopePid(pid)}
                       className={`rounded border px-2 py-1 font-mono text-[10px] font-bold transition cursor-pointer ${
@@ -222,46 +244,128 @@ export function CenterDiagnosticColumn({
             </div>
           </div>
 
-          {/* 8 Digital PID Gauge Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            {EIGHT_GAUGE_PIDS.map((pid) => {
-              const def = UNIVERSAL_PID_REGISTRY[pid];
-              const val = telemetry[pid] ?? 0;
-              const isWarn = val < def.warnLow || val > def.warnHigh;
-              const isFocused = scopePid === pid;
-              return (
+          {/* Progressive Disclosure KPI Cards */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between px-0.5 font-mono text-[11px]">
+              <span className="text-slate-400">
+                {showAllEight
+                  ? "ALL 8 LIVE SAE J1979 / UDS TELEMETRY CHANNELS"
+                  : "4 CRITICAL TELEMETRY KPIs (FOCUSED VIEW)"}
+              </span>
+              {viewMode === "FOCUSED" && (
                 <button
-                  key={pid}
                   type="button"
-                  onClick={() => onSelectScopePid(pid)}
-                  className={`rounded-xl border p-3 text-left transition cursor-pointer ${
-                    isWarn
-                      ? "border-[#FF1E42]/70 bg-[#16070B]/90 crimson-glow"
-                      : isFocused
-                      ? "border-[#00FF9D]/60 bg-[#0A1312]/90"
-                      : "border-white/10 bg-[#0A0D14]/90 hover:border-white/25"
-                  }`}
+                  onClick={() => setShowAllChannelsInFocused((v) => !v)}
+                  className="flex items-center gap-1 rounded-md border border-[#00E5FF]/40 bg-[#00E5FF]/10 px-2.5 py-1 text-[10px] font-bold text-[#00E5FF] hover:bg-[#00E5FF]/20 cursor-pointer"
                 >
-                  <div className="flex items-center justify-between font-mono text-[10px]">
-                    <span className="font-bold text-[#00E5FF]">{def.shortName}</span>
-                    <span className="text-slate-500">0x{def.key}</span>
-                  </div>
-                  <div
-                    className={`mt-1 font-mono text-xl font-bold ${
-                      isWarn ? "text-[#FF1E42]" : "text-white"
-                    }`}
-                  >
-                    {val.toFixed(def.decimals)}
-                    <span className="ml-1 text-xs font-normal text-slate-400">
-                      {def.unit}
-                    </span>
-                  </div>
-                  <div className="mt-1 truncate font-mono text-[10px] text-slate-500">
-                    {def.name}
-                  </div>
+                  {showAllChannelsInFocused ? (
+                    <>
+                      <ChevronUp className="h-3 w-3" />
+                      <span>Show 4 Critical KPIs</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3" />
+                      <span>Show All 8 Telemetry Channels</span>
+                    </>
+                  )}
                 </button>
-              );
-            })}
+              )}
+            </div>
+
+            {showAllEight ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {EIGHT_GAUGE_PIDS.map((pid, idx) => {
+                  const def = UNIVERSAL_PID_REGISTRY[pid];
+                  const val = telemetry[pid] ?? 0;
+                  const isWarn = val < def.warnLow || val > def.warnHigh;
+                  const isFocused = scopePid === pid;
+                  return (
+                    <button
+                      key={`${pid}-${idx}`}
+                      type="button"
+                      onClick={() => onSelectScopePid(pid)}
+                      className={`rounded-xl border p-3 text-left transition cursor-pointer ${
+                        isWarn
+                          ? "border-[#FF1E42]/70 bg-[#16070B]/90 crimson-glow"
+                          : isFocused
+                          ? "border-[#00FF9D]/60 bg-[#0A1312]/90"
+                          : "border-white/10 bg-[#0A0D14]/90 hover:border-white/25"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-mono text-[10px]">
+                        <span className="font-bold text-[#00E5FF]">{def.shortName}</span>
+                        <span className="text-slate-500">0x{def.key}</span>
+                      </div>
+                      <div
+                        className={`mt-1 font-mono text-xl font-bold ${
+                          isWarn ? "text-[#FF1E42]" : "text-white"
+                        }`}
+                      >
+                        {val.toFixed(def.decimals)}
+                        <span className="ml-1 text-xs font-normal text-slate-400">
+                          {def.unit}
+                        </span>
+                      </div>
+                      <div className="mt-1 truncate font-mono text-[10px] text-slate-500">
+                        {def.name}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {(["010C", "010D", soul.primaryPid, "0142"] as PidKey[]).map((pid, idx) => {
+                  const def = UNIVERSAL_PID_REGISTRY[pid];
+                  const val = telemetry[pid] ?? 0;
+                  const targetVal = soul.baselineTelemetry[pid] ?? val;
+                  const isPrimary = idx === 2;
+                  const isWarn =
+                    val < def.warnLow || val > def.warnHigh || (isPrimary && Boolean(activeCurse));
+                  const title =
+                    idx === 0
+                      ? "RPM"
+                      : idx === 1
+                      ? "SPEED"
+                      : idx === 2
+                      ? `${def.shortName} ACTUAL vs TARGET`
+                      : "SYSTEM VOLTAGE";
+                  return (
+                    <button
+                      key={`${pid}-${idx}`}
+                      type="button"
+                      onClick={() => onSelectScopePid(pid)}
+                      className={`rounded-xl border p-3.5 text-left transition cursor-pointer ${
+                        isWarn
+                          ? "border-[#FF1E42]/75 bg-[#16070B]/90 crimson-glow"
+                          : scopePid === pid
+                          ? "border-[#00FF9D]/60 bg-[#0A1312]/90"
+                          : "border-white/10 bg-[#0A0D14]/90 hover:border-white/25"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between font-mono text-[10px]">
+                        <span className="font-bold text-[#00E5FF] truncate pr-1">{title}</span>
+                        <span className="text-slate-500 shrink-0">0x{def.key}</span>
+                      </div>
+                      <div
+                        className={`mt-1 font-mono text-xl font-bold ${
+                          isWarn ? "text-[#FF1E42]" : "text-white"
+                        }`}
+                      >
+                        {val.toFixed(def.decimals)}
+                        <span className="ml-1 text-xs font-normal text-slate-400">{def.unit}</span>
+                      </div>
+                      <div className="mt-1 truncate font-mono text-[10px] text-slate-400">
+                        {isPrimary
+                          ? `Target: ${targetVal.toFixed(def.decimals)} ${def.unit}`
+                          : def.name}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -424,18 +528,18 @@ export function CenterDiagnosticColumn({
               className="flex flex-col items-start rounded-lg border border-[#FFB800]/40 bg-[#FFB800]/10 p-3 text-left hover:bg-[#FFB800]/20 cursor-pointer"
             >
               <span className="font-mono text-xs font-bold text-[#FFB800]">
-                Mode 31 // Mechatronic Adapt / DPF Regen
+                Mode 31 // Solenoid Adapt / DPF Regen
               </span>
               <span className="mt-1 font-mono text-[10px] text-slate-300">
-                TX: 7E0 04 31 01 FF 0A • Calibrates solenoids, BMS &amp; DPF
+                TX: 7E0 04 31 01 F4 0A • Calibrates solenoids, BMS &amp; DPF
               </span>
             </button>
           </div>
 
           <div className="h-64 overflow-y-auto rounded-lg border border-white/10 bg-[#050608] p-3 font-mono text-xs space-y-2">
-            {udsLogs.map((log) => (
+            {udsLogs.map((log, idx) => (
               <div
-                key={log.id}
+                key={`${log.id}-${idx}`}
                 className={`rounded border px-3 py-2 ${
                   log.direction === "TX 7E0"
                     ? "border-[#00E5FF]/30 bg-[#00E5FF]/5 text-[#00E5FF]"

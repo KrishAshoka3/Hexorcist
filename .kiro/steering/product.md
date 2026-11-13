@@ -8,10 +8,10 @@ HEXORCIST bridges low-level hexadecimal automotive hardware protocols (SAE J1979
 
 ## Universal Vehicle Support
 All telemetry flows through the table-driven `UNIVERSAL_PID_REGISTRY` supporting four powertrain classes:
-1. `GERMAN_V6_DSG`: 2014 Supercharged 3.0T V6 + 7-Speed Dual-Clutch (0B5)
-2. `JDM_TWIN_ROTARY`: 1999 Sequential Twin-Turbo 13B-REW Rotary
-3. `AWD_800V_EV`: 2025 800V Dual-Motor Battery Electric Performance Sedan
-4. `HEAVY_DIESEL_TOW`: 2023 6.7L High-Output Turbo-Diesel Tow Rig
+1. `GERMAN_V6_DSG`: Euro 3.0L Supercharged V6 + 7-Speed DSG (0B5)
+2. `JDM_TWIN_ROTARY`: JDM 1.3L Twin-Turbo Rotary (13B-REW)
+3. `AWD_800V_EV`: 800V Dual-Motor SiC Inverter EV Sedan
+4. `HEAVY_DIESEL_TOW`: 6.7L High-Output Turbo-Diesel Tow Rig
 
 ## Financial & Accounting Invariants
 - All repair escrow calculations must be deterministic and monotonic with respect to vehicle anomaly severity.

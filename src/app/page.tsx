@@ -31,6 +31,7 @@ import {
   ConnectionMode,
   DecodedNhtsaVin,
   TopCommandBar,
+  WorkspaceViewMode,
 } from "@/components/hexorcist/TopCommandBar";
 import {
   FrameLogEntry,
@@ -47,6 +48,18 @@ import {
   EscrowLedgerEntry,
   RightNecromancerVaultColumn,
 } from "@/components/hexorcist/RightNecromancerVaultColumn";
+import { EngineerProHardwareDock } from "@/components/hexorcist/EngineerProHardwareDock";
+import {
+  JUDGE_TOUR_STEPS,
+  JudgeGuidedTour,
+  JudgeTourStepNumber,
+} from "@/components/hexorcist/JudgeGuidedTour";
+import { KiroArchitectureDrawer } from "@/components/hexorcist/KiroArchitectureDrawer";
+import {
+  playHexSound,
+  setSoundMuted as persistSoundMuted,
+} from "@/lib/sound-fx";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
 import type { DiagnoseResponsePayload } from "@/app/api/diagnose/route";
 
 interface WebSerialPortLike {
@@ -59,6 +72,14 @@ interface WebSerialPortLike {
 const nowTimeStr = (): string => {
   const d = new Date();
   return d.toTimeString().slice(0, 8) + "." + String(d.getMilliseconds()).padStart(3, "0");
+};
+
+let monotonicEntryCounter = 0;
+const makeUniqueEntryId = (prefix: string): string => {
+  monotonicEntryCounter = (monotonicEntryCounter + 1) % 1_000_000;
+  return `${prefix}-${Date.now()}-${monotonicEntryCounter}-${Math.random()
+    .toString(36)
+    .slice(2, 7)}`;
 };
 
 function buildInitialDynoCurve(
@@ -105,6 +126,14 @@ export default function HexorcistDashboardPage() {
       : VEHICLE_SOUL_PRESETS[activeVehicleId as VehicleArchitectureId] ??
         VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
 
+  const [viewMode, setViewMode] = useState<WorkspaceViewMode>("FOCUSED");
+  const [activeWorkflowStep, setActiveWorkflowStep] = useState<1 | 2 | 3>(1);
+  const [soundMuted, setSoundMutedState] = useState<boolean>(false);
+  const [kiroDrawerOpen, setKiroDrawerOpen] = useState<boolean>(false);
+  const [guidedTourStep, setGuidedTourStep] = useState<JudgeTourStepNumber | null>(null);
+  const [tourAutoPlaying, setTourAutoPlaying] = useState<boolean>(true);
+  const [tourStepProgressPct, setTourStepProgressPct] = useState<number>(0);
+
   const [crtEnabled, setCrtEnabled] = useState<boolean>(true);
   const [connectionMode, setConnectionMode] =
     useState<ConnectionMode>("VIRTUAL ECU 25Hz");
@@ -143,7 +172,9 @@ export default function HexorcistDashboardPage() {
   const [csvCursor, setCsvCursor] = useState<number>(0);
   const [csvPlaying, setCsvPlaying] = useState<boolean>(false);
   const [csvSpeed, setCsvSpeed] = useState<PlaybackSpeedMultiplier>(1);
-  const [csvSourceLabel, setCsvSourceLabel] = useState<string>("OBDeleven / VCDS Sample");
+  const [csvSourceLabel, setCsvSourceLabel] = useState<string>(
+    "ISO 15765-4 / SAE J1979 CAN Telemetry CSV"
+  );
   const [physicalPortConnected, setPhysicalPortConnected] = useState<boolean>(false);
   const [loopbackActive, setLoopbackActive] = useState<boolean>(false);
 
@@ -188,6 +219,15 @@ export default function HexorcistDashboardPage() {
   const serialPortRef = useRef<WebSerialPortLike | null>(null);
   const csvQueueRef = useRef<string[]>([]);
 
+  const handleToggleSoundMuted = () => {
+    const next = !soundMuted;
+    setSoundMutedState(next);
+    persistSoundMuted(next);
+    if (!next) {
+      playHexSound("CLICK");
+    }
+  };
+
   const anomalyScore = useMemo(() => {
     if (activeCurse) return activeCurse.severityScore;
     let warnings = 0;
@@ -209,7 +249,7 @@ export default function HexorcistDashboardPage() {
     if (!parsed.valid || !parsed.pidKey || parsed.value === null) return;
 
     const entry: FrameLogEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      id: makeUniqueEntryId("frame"),
       timestamp: nowTimeStr(),
       rawFrame,
       parsed,
@@ -394,13 +434,16 @@ export default function HexorcistDashboardPage() {
   };
 
   const handleCastCurse = (curse: MechanicalCursePreset) => {
+    playHexSound("FAULT_ALERT");
     setActiveCurse(curse);
     setCustomDtc(curse.dtcCode);
     setScopePid(curse.targetPid);
     setDynoCurve(buildInitialDynoCurve(soul, curse.powerLossPct));
+    setActiveWorkflowStep(2);
   };
 
   const handleClearCurses = () => {
+    playHexSound("EXORCISM_CHIME");
     setActiveCurse(null);
     setTelemetry({ ...soul.baselineTelemetry });
     setDynoCurve(buildInitialDynoCurve(soul, 0));
@@ -485,8 +528,10 @@ export default function HexorcistDashboardPage() {
   };
 
   const handleActivateLoopbackPort = () => {
+    playHexSound("CLICK");
     setPhysicalPortConnected(false);
     setLoopbackActive(true);
+    setConnectionMode("WEBSERIAL ELM327");
     setWebSerialStatus("Virtual Loopback COM4 Active (ELM327 ISO 15765-4 500kbaud)");
   };
 
@@ -546,11 +591,13 @@ export default function HexorcistDashboardPage() {
   };
 
   const handleLoadBuiltInSampleCsv = () => {
+    playHexSound("CLICK");
     const csv = generateSampleCSV(activeVehicleId, customVinSoul);
     const parsedFrames = parseTelemetryCSV(csv);
+    setActiveWorkflowStep(2);
     startCsvPlaybackSession(
       parsedFrames,
-      `OBDeleven/VCDS ${soul.codename} WOT Pull`
+      `ISO 15765-4 / SAE J1979 CAN Telemetry CSV (${soul.codename})`
     );
   };
 
@@ -594,9 +641,11 @@ export default function HexorcistDashboardPage() {
     const tRx = nowTimeStr();
 
     if (mode === "04") {
+      const rxId = makeUniqueEntryId("uds-rx");
+      const txId = makeUniqueEntryId("uds-tx");
       setUdsLogs((prev) => [
         {
-          id: `${Date.now()}-rx`,
+          id: rxId,
           timestamp: tRx,
           direction: "RX 7E8",
           hex: "7E8 01 44 45",
@@ -605,7 +654,7 @@ export default function HexorcistDashboardPage() {
           status: "OK",
         },
         {
-          id: `${Date.now()}-tx`,
+          id: txId,
           timestamp: tTx,
           direction: "TX 7E0",
           hex: "7E0 01 04 05",
@@ -616,9 +665,11 @@ export default function HexorcistDashboardPage() {
       ]);
       handleClearCurses();
     } else if (mode === "2F") {
+      const rxId = makeUniqueEntryId("uds-rx");
+      const txId = makeUniqueEntryId("uds-tx");
       setUdsLogs((prev) => [
         {
-          id: `${Date.now()}-rx`,
+          id: rxId,
           timestamp: tRx,
           direction: "RX 7E8",
           hex: "7E8 05 6F F0 10 03 74",
@@ -627,7 +678,7 @@ export default function HexorcistDashboardPage() {
           status: "OK",
         },
         {
-          id: `${Date.now()}-tx`,
+          id: txId,
           timestamp: tTx,
           direction: "TX 7E0",
           hex: "7E0 05 2F F0 10 03 FF",
@@ -642,32 +693,36 @@ export default function HexorcistDashboardPage() {
         "015C": Math.max(68, (prev["015C"] ?? 85) - 24),
       }));
     } else {
+      const rxId = makeUniqueEntryId("uds-rx");
+      const txId = makeUniqueEntryId("uds-tx");
       setUdsLogs((prev) => [
         {
-          id: `${Date.now()}-rx`,
+          id: rxId,
           timestamp: tRx,
           direction: "RX 7E8",
-          hex: "7E8 04 71 01 FF 0A 80",
+          hex: "7E8 04 71 01 F4 0A 8B",
           description:
-            "ISO 14229 RoutineControl Positive Response — Subsystem Adaptation & Regen Complete",
+            "ISO 14229 RoutineControl Positive Response — Solenoid & Sensor Calibration Restored (100% Health)",
           status: "OK",
         },
         {
-          id: `${Date.now()}-tx`,
+          id: txId,
           timestamp: tTx,
           direction: "TX 7E0",
-          hex: "7E0 04 31 01 FF 0A C0",
+          hex: "7E0 04 31 01 F4 0A",
           description:
-            "ISO 14229 Mode 31 StartRoutine (Mechatronic Kiss-Point / BMS Balance / DPF Regen)",
+            "ISO 14229 Mode 31 StartRoutine (Bidirectional Solenoid / BMS / DPF Reset)",
           status: "OK",
         },
         ...prev,
       ]);
       handleClearCurses();
+      setActiveWorkflowStep(3);
     }
   };
 
   const handleRunAutopsy = async () => {
+    playHexSound("AUTOPSY_SCAN");
     setAutopsyLoading(true);
     try {
       const targetFrame =
@@ -689,21 +744,31 @@ export default function HexorcistDashboardPage() {
       });
       const json = (await res.json()) as DiagnoseResponsePayload;
       setAutopsyResult(json);
+      setActiveWorkflowStep(3);
     } finally {
       setAutopsyLoading(false);
     }
   };
 
+  const escrowBalanceRef = useRef<number>(escrowBalanceCents);
+  useEffect(() => {
+    escrowBalanceRef.current = escrowBalanceCents;
+  }, [escrowBalanceCents]);
+
   const handleSimulateCommuteDeposit = () => {
+    playHexSound("ESCROW_DEPOSIT");
+    setActiveWorkflowStep(3);
     const miles = 25;
     const depositCents = miles * escrowRateCentsPerMile;
-    const nextBalance = escrowBalanceCents + depositCents;
-    const txHash = Math.random().toString(16).slice(2, 10);
+    const nextBalance = escrowBalanceRef.current + depositCents;
+    escrowBalanceRef.current = nextBalance;
+    const txHash = Math.random().toString(36).slice(2, 9);
+    const entryId = makeUniqueEntryId("ledger-dep");
     setEscrowBalanceCents(nextBalance);
     setLedgerEntries((prev) => [
       {
-        id: `${Date.now()}-${txHash}`,
-        transferId: `tr_kiroween_${txHash}`,
+        id: entryId,
+        transferId: `tr_escrow_${txHash}`,
         timestamp: new Date().toTimeString().slice(0, 8),
         type: "COMMUTE_WITHHOLDING",
         miles,
@@ -719,14 +784,16 @@ export default function HexorcistDashboardPage() {
   };
 
   const handleReleaseMechanicEscrow = (shopName: string, amountCents: number) => {
-    const safeDeduction = Math.min(escrowBalanceCents, Math.max(0, amountCents));
-    const nextBalance = Math.max(0, escrowBalanceCents - safeDeduction);
-    const txHash = Math.random().toString(16).slice(2, 10);
+    const safeDeduction = Math.min(escrowBalanceRef.current, Math.max(0, amountCents));
+    const nextBalance = Math.max(0, escrowBalanceRef.current - safeDeduction);
+    escrowBalanceRef.current = nextBalance;
+    const txHash = Math.random().toString(36).slice(2, 9);
+    const entryId = makeUniqueEntryId("ledger-rel");
     setEscrowBalanceCents(nextBalance);
     setLedgerEntries((prev) => [
       {
-        id: `${Date.now()}-${txHash}`,
-        transferId: `tr_kiroween_rel_${txHash}`,
+        id: entryId,
+        transferId: `tr_escrow_rel_${txHash}`,
         timestamp: new Date().toTimeString().slice(0, 8),
         type: "MECHANIC_RELEASE",
         miles: 0,
@@ -738,6 +805,98 @@ export default function HexorcistDashboardPage() {
       ...prev,
     ]);
   };
+
+  const executeGuidedTourStep = (step: JudgeTourStepNumber) => {
+    setGuidedTourStep(step);
+    setTourStepProgressPct(0);
+
+    if (step === 1) {
+      const dsgSoul = VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
+      const p0750Curse = dsgSoul.curses[0];
+      setConnectionMode("VIRTUAL ECU 25Hz");
+      setCsvPlaying(false);
+      setStreamPaused(false);
+      setActiveVehicleId("GERMAN_V6_DSG");
+      setActiveVin(dsgSoul.defaultVin);
+      setDecodedVinInfo(null);
+      setActiveCurse(p0750Curse);
+      setCustomDtc(p0750Curse.dtcCode);
+      setScopePid("22F40A");
+      setActiveTab("OSCILLOSCOPE");
+      setTelemetry({
+        ...dsgSoul.baselineTelemetry,
+        ...(p0750Curse.telemetryOverrides as Partial<Record<PidKey, number>>),
+      });
+      setDynoCurve(buildInitialDynoCurve(dsgSoul, p0750Curse.powerLossPct));
+      setActiveWorkflowStep(1);
+      playHexSound("FAULT_ALERT");
+    } else if (step === 2) {
+      setActiveTab("OSCILLOSCOPE");
+      setScopePid("22F40A");
+      playHexSound("CLICK");
+    } else if (step === 3) {
+      setActiveWorkflowStep(2);
+      void handleRunAutopsy();
+    } else if (step === 4) {
+      setActiveWorkflowStep(3);
+      handleSimulateCommuteDeposit();
+    } else if (step === 5) {
+      setActiveWorkflowStep(3);
+      setActiveTab("UDS_TERMINAL");
+      handleDispatchUdsCommand("31");
+    }
+  };
+
+  const handleStartGuidedTour = () => {
+    if (guidedTourStep !== null) {
+      setGuidedTourStep(null);
+      setTourStepProgressPct(0);
+      playHexSound("CLICK");
+      return;
+    }
+    setTourAutoPlaying(true);
+    executeGuidedTourStep(1);
+  };
+
+  const handleNextGuidedTourStep = () => {
+    if (guidedTourStep === null) return;
+    if (guidedTourStep >= 5) {
+      setGuidedTourStep(null);
+      setTourStepProgressPct(0);
+      playHexSound("CLICK");
+      return;
+    }
+    executeGuidedTourStep((guidedTourStep + 1) as JudgeTourStepNumber);
+  };
+
+  const nextTourStepRef = useRef(handleNextGuidedTourStep);
+  useEffect(() => {
+    nextTourStepRef.current = handleNextGuidedTourStep;
+  });
+
+  useEffect(() => {
+    if (guidedTourStep === null || !tourAutoPlaying) return;
+    const stepDurationMs = 6000;
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= stepDurationMs) {
+        clearInterval(timer);
+        nextTourStepRef.current();
+      } else {
+        setTourStepProgressPct((elapsed / stepDurationMs) * 100);
+      }
+    }, 100);
+    return () => clearInterval(timer);
+  }, [guidedTourStep, tourAutoPlaying]);
+
+  const activeTourSpotlightPanel = useMemo(
+    () =>
+      guidedTourStep
+        ? JUDGE_TOUR_STEPS.find((s) => s.step === guidedTourStep)?.targetPanel ?? null
+        : null,
+    [guidedTourStep]
+  );
 
   const peakActualWhp = useMemo(
     () => dynoCurve.reduce((max, p) => Math.max(max, p.actualWhp), 0),
@@ -751,17 +910,37 @@ export default function HexorcistDashboardPage() {
   return (
     <div className={`min-h-screen bg-[#06070A] text-white ${crtEnabled ? "crt-scanlines" : ""}`}>
       <TopCommandBar
+        viewMode={viewMode}
+        onChangeViewMode={(m) => {
+          playHexSound("CLICK");
+          setViewMode(m);
+        }}
         activeVehicleId={activeVehicleId}
-        onSelectVehicle={handleSelectVehicle}
+        onSelectVehicle={(id) => {
+          playHexSound("CLICK");
+          handleSelectVehicle(id);
+        }}
         customVinSoul={customVinSoul}
         onBindCustomVinSoul={handleBindCustomVinSoul}
         onOpenHardwareStudio={(tab) => {
+          playHexSound("CLICK");
           setHardwareStudioTab(tab);
           setHardwareModalOpen(true);
         }}
+        onStartGuidedTour={handleStartGuidedTour}
+        guidedTourStep={guidedTourStep}
+        onOpenKiroDrawer={() => {
+          playHexSound("CLICK");
+          setKiroDrawerOpen(true);
+        }}
+        soundMuted={soundMuted}
+        onToggleSoundMuted={handleToggleSoundMuted}
         connectionMode={connectionMode}
         crtEnabled={crtEnabled}
-        onToggleCrt={() => setCrtEnabled((v) => !v)}
+        onToggleCrt={() => {
+          playHexSound("CLICK");
+          setCrtEnabled((v) => !v);
+        }}
         activeVin={activeVin}
         decodedVinInfo={decodedVinInfo}
         onApplyVin={(vin, decoded) => {
@@ -772,6 +951,72 @@ export default function HexorcistDashboardPage() {
       />
 
       <main className="mx-auto max-w-[1840px] px-4 py-4 space-y-4">
+        {/* 1-2-3 Visual Workflow Stepper (Progressive Disclosure in Focused Mode) */}
+        {viewMode === "FOCUSED" && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 rounded-xl border border-white/10 bg-[#0A0D14]/90 p-2.5 font-mono">
+            {[
+              {
+                step: 1 as const,
+                title: "1. Inject Fault / Load Log",
+                sub: activeCurse
+                  ? `Active Fault: ${activeCurse.dtcCode} (${activeCurse.powerLossPct}% WHP Loss)`
+                  : "ECU Nominal — Select a Fault or Load CSV",
+                done: Boolean(activeCurse) || connectionMode === "CSV REPLAY",
+              },
+              {
+                step: 2 as const,
+                title: "2. Run Vertex AI Autopsy",
+                sub: autopsyResult
+                  ? `Quote Ready: $${autopsyResult.estimatedCostUsd.toLocaleString()} (${autopsyResult.oemPartNumber})`
+                  : "Diagnose Root Cause, OEM Spec & Labor",
+                done: Boolean(autopsyResult),
+              },
+              {
+                step: 3 as const,
+                title: "3. Fund Escrow & Exorcise ECU",
+                sub: `Vault $${(escrowBalanceCents / 100).toFixed(2)} • Rate $${(
+                  escrowRateCentsPerMile / 100
+                ).toFixed(2)}/mi`,
+                done: !activeCurse && udsLogs.length > 2,
+              },
+            ].map((item, idx) => {
+              const isActive = activeWorkflowStep === item.step;
+              return (
+                <button
+                  key={`${item.step}-${idx}`}
+                  type="button"
+                  onClick={() => {
+                    playHexSound("CLICK");
+                    setActiveWorkflowStep(item.step);
+                    if (item.step === 3 && activeCurse) {
+                      setActiveTab("UDS_TERMINAL");
+                    }
+                  }}
+                  className={`flex items-center justify-between gap-2 rounded-lg border px-3.5 py-2.5 text-left transition cursor-pointer ${
+                    isActive
+                      ? "border-[#00FF9D]/80 bg-[#00FF9D]/12 text-white shadow-[0_0_20px_rgba(0,255,157,0.16)]"
+                      : "border-white/10 bg-[#06080D] text-slate-300 hover:border-white/25"
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 text-xs font-bold">
+                      {item.done ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#00FF9D]" />
+                      ) : null}
+                      <span className={isActive ? "text-[#00FF9D]" : "text-white"}>
+                        {item.title}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 truncate text-[10px] text-slate-400">{item.sub}</div>
+                  </div>
+                  {idx < 2 ? (
+                    <ArrowRight className="h-4 w-4 shrink-0 text-slate-500 hidden md:block" />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {connectionMode === "CSV REPLAY" && csvFrames.length > 0 && (
           <CsvPlaybackScrubberBar
             frames={csvFrames}
@@ -790,18 +1035,27 @@ export default function HexorcistDashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           <div className="lg:col-span-3">
             <LeftHexTerminalColumn
+              viewMode={viewMode}
+              activeWorkflowStep={activeWorkflowStep}
+              tourSpotlightPanel={activeTourSpotlightPanel}
+              forceOpenHexDrawer={guidedTourStep === 1}
+              activeDtc={activeCurse?.dtcCode ?? customDtc}
               soul={soul}
               frames={frames}
               selectedFrame={selectedFrame}
               onSelectFrame={setSelectedFrame}
               streamPaused={streamPaused}
-              onTogglePause={() => setStreamPaused((p) => !p)}
+              onTogglePause={() => {
+                playHexSound("CLICK");
+                setStreamPaused((p) => !p);
+              }}
               activeCurse={activeCurse}
               onCastCurse={handleCastCurse}
               onClearCurses={handleClearCurses}
               connectionMode={connectionMode}
               webSerialStatus={webSerialStatus}
               onConnectWebSerial={() => {
+                playHexSound("CLICK");
                 setHardwareStudioTab("WEBSERIAL_DRAWER");
                 setHardwareModalOpen(true);
               }}
@@ -810,6 +1064,7 @@ export default function HexorcistDashboardPage() {
               onUploadCsvFile={handleUploadCsvFile}
               onLoadBuiltInSampleCsv={handleLoadBuiltInSampleCsv}
               onOpenDbcInspector={() => {
+                playHexSound("CLICK");
                 setHardwareStudioTab("DBC_INSPECTOR");
                 setHardwareModalOpen(true);
               }}
@@ -818,13 +1073,22 @@ export default function HexorcistDashboardPage() {
 
           <div className="lg:col-span-6">
             <CenterDiagnosticColumn
+              viewMode={viewMode}
+              activeWorkflowStep={activeWorkflowStep}
+              tourSpotlightPanel={activeTourSpotlightPanel}
               activeTab={activeTab}
-              onSelectTab={setActiveTab}
+              onSelectTab={(t) => {
+                playHexSound("CLICK");
+                setActiveTab(t);
+              }}
               soul={soul}
               activeCurse={activeCurse}
               telemetry={telemetry}
               scopePid={scopePid}
-              onSelectScopePid={setScopePid}
+              onSelectScopePid={(p) => {
+                playHexSound("CLICK");
+                setScopePid(p);
+              }}
               scopeHistory={scopeHistory}
               dynoCurve={dynoCurve}
               dynoRunning={dynoRunning}
@@ -838,6 +1102,9 @@ export default function HexorcistDashboardPage() {
 
           <div className="lg:col-span-3">
             <RightNecromancerVaultColumn
+              viewMode={viewMode}
+              activeWorkflowStep={activeWorkflowStep}
+              tourSpotlightPanel={activeTourSpotlightPanel}
               activeDtc={activeCurse?.dtcCode ?? customDtc}
               onChangeCustomDtc={setCustomDtc}
               autopsyLoading={autopsyLoading}
@@ -859,7 +1126,53 @@ export default function HexorcistDashboardPage() {
             />
           </div>
         </div>
+
+        {/* Unfolded OpenDBC 64-Bit Signal Matrix & WebSerial ELM327 AT Terminal in Engineer Pro Mode */}
+        {viewMode === "PRO" && (
+          <EngineerProHardwareDock
+            activeVehicleId={activeVehicleId}
+            soul={soul}
+            telemetry={telemetry}
+            activeDtc={activeCurse?.dtcCode ?? null}
+            activeVin={activeVin}
+            webSerialStatus={webSerialStatus}
+            loopbackActive={loopbackActive}
+            physicalPortConnected={physicalPortConnected}
+            onActivateLoopbackPort={handleActivateLoopbackPort}
+            onIngestLoopbackFrame={ingestRawFrame}
+            onClearFaultsFromTerminal={handleClearCurses}
+            onOpenFullModal={(tab) => {
+              playHexSound("CLICK");
+              setHardwareStudioTab(tab);
+              setHardwareModalOpen(true);
+            }}
+          />
+        )}
       </main>
+
+      <JudgeGuidedTour
+        activeStep={guidedTourStep}
+        autoPlaying={tourAutoPlaying}
+        stepProgressPct={tourStepProgressPct}
+        onNextStep={handleNextGuidedTourStep}
+        onToggleAutoPlay={() => {
+          playHexSound("CLICK");
+          setTourAutoPlaying((p) => !p);
+        }}
+        onSkipTour={() => {
+          playHexSound("CLICK");
+          setGuidedTourStep(null);
+          setTourStepProgressPct(0);
+        }}
+      />
+
+      <KiroArchitectureDrawer
+        open={kiroDrawerOpen}
+        onClose={() => {
+          playHexSound("CLICK");
+          setKiroDrawerOpen(false);
+        }}
+      />
 
       <HardwareAndDbcModal
         open={hardwareModalOpen}

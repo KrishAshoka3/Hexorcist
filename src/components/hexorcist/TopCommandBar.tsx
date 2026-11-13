@@ -7,11 +7,15 @@ import {
   Cable,
   Cpu,
   FileSpreadsheet,
+  Layers,
   Monitor,
-  Radio,
+  Play,
   Search,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
+  Volume2,
+  VolumeX,
   X,
   CheckCircle2,
   Loader2,
@@ -24,6 +28,7 @@ import {
 import type { HardwareStudioTab } from "@/components/HardwareAndDbcModal";
 
 export type ConnectionMode = "VIRTUAL ECU 25Hz" | "WEBSERIAL ELM327" | "CSV REPLAY";
+export type WorkspaceViewMode = "FOCUSED" | "PRO";
 
 export interface DecodedNhtsaVin {
   vin: string;
@@ -41,11 +46,18 @@ export interface DecodedNhtsaVin {
 }
 
 interface TopCommandBarProps {
+  viewMode: WorkspaceViewMode;
+  onChangeViewMode: (mode: WorkspaceViewMode) => void;
   activeVehicleId: SoulProfileId;
   onSelectVehicle: (id: SoulProfileId) => void;
   customVinSoul: VehicleSoulPreset | null;
   onBindCustomVinSoul: (decoded: DecodedNhtsaVin) => void;
   onOpenHardwareStudio: (tab: HardwareStudioTab) => void;
+  onStartGuidedTour: () => void;
+  guidedTourStep: number | null;
+  onOpenKiroDrawer: () => void;
+  soundMuted: boolean;
+  onToggleSoundMuted: () => void;
   connectionMode: ConnectionMode;
   crtEnabled: boolean;
   onToggleCrt: () => void;
@@ -56,11 +68,18 @@ interface TopCommandBarProps {
 }
 
 export function TopCommandBar({
+  viewMode,
+  onChangeViewMode,
   activeVehicleId,
   onSelectVehicle,
   customVinSoul,
   onBindCustomVinSoul,
   onOpenHardwareStudio,
+  onStartGuidedTour,
+  guidedTourStep,
+  onOpenKiroDrawer,
+  soundMuted,
+  onToggleSoundMuted,
   connectionMode,
   crtEnabled,
   onToggleCrt,
@@ -132,16 +151,16 @@ export function TopCommandBar({
       const wmi = cleanVin.slice(0, 3);
       const fallbackMake =
         wmi.startsWith("1FA") || wmi.startsWith("1FT")
-          ? "FORD"
+          ? "NA V8 POWERTRAIN"
           : wmi.startsWith("1HG") || wmi.startsWith("JHM")
-          ? "HONDA"
+          ? "JDM TURBO CHASSIS"
           : wmi.startsWith("5YJ")
-          ? "TESLA"
+          ? "800V EV ARCHITECTURE"
           : wmi.startsWith("WAU")
-          ? "AUDI"
+          ? "EURO SUPERCHARGED CHASSIS"
           : wmi.startsWith("WBA") || wmi.startsWith("WBS")
-          ? "BMW"
-          : "CUSTOM OEM";
+          ? "EURO PERFORMANCE CHASSIS"
+          : "ISO 3779 OEM CHASSIS";
       const isEvFallback = wmi.startsWith("5YJ");
       const fallbackParsed: DecodedNhtsaVin = {
         vin: cleanVin,
@@ -202,28 +221,110 @@ export function TopCommandBar({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* Live Telemetry Data Source Indicator Badge */}
               <div
-                className={`flex items-center gap-2 rounded-md border px-3 py-1.5 font-mono text-xs ${
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 font-mono text-[11px] font-bold shadow-sm ${
                   connectionMode === "WEBSERIAL ELM327"
-                    ? "border-[#00E5FF]/50 bg-[#00E5FF]/10 text-[#00E5FF]"
+                    ? "border-purple-400/60 bg-purple-500/15 text-purple-200"
                     : connectionMode === "CSV REPLAY"
-                    ? "border-[#FFB800]/50 bg-[#FFB800]/10 text-[#FFB800]"
-                    : "border-[#00FF9D]/40 bg-[#00FF9D]/10 text-[#00FF9D]"
+                    ? "border-sky-400/60 bg-sky-500/15 text-sky-300"
+                    : "border-[#00FF9D]/55 bg-[#00FF9D]/12 text-[#00FF9D]"
                 }`}
               >
-                <span className="h-2 w-2 rounded-full bg-current animate-pulse" />
-                <Radio className="h-3.5 w-3.5" />
-                <span>{connectionMode}</span>
+                <span aria-hidden="true">
+                  {connectionMode === "WEBSERIAL ELM327"
+                    ? "🟣"
+                    : connectionMode === "CSV REPLAY"
+                    ? "🔵"
+                    : "🟢"}
+                </span>
+                <span>
+                  {connectionMode === "WEBSERIAL ELM327"
+                    ? "[SOURCE: WEBSERIAL LIVE OBD-II HARDWARE]"
+                    : connectionMode === "CSV REPLAY"
+                    ? "[SOURCE: ISO 15765-4 CSV LOG REPLAY]"
+                    : activeVehicleId === "CUSTOM_VIN_SOUL" || decodedVinInfo
+                    ? "[SOURCE: NHTSA VIN-CALIBRATED 25Hz SIM]"
+                    : "[SOURCE: 25Hz SYNTHETIC ECU PHYSICS SIM]"}
+                </span>
               </div>
 
+              {/* Focused Mode vs. Engineer Pro Mode Segmented Control */}
+              <div className="flex items-center rounded-lg border border-white/15 bg-[#0A0D14] p-0.5 font-mono text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => onChangeViewMode("FOCUSED")}
+                  className={`rounded-md px-2.5 py-1 font-bold transition cursor-pointer ${
+                    viewMode === "FOCUSED"
+                      ? "bg-[#00FF9D] text-[#06070A] shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Focused Mode (Default)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChangeViewMode("PRO")}
+                  className={`flex items-center gap-1 rounded-md px-2.5 py-1 font-bold transition cursor-pointer ${
+                    viewMode === "PRO"
+                      ? "bg-[#00E5FF] text-[#06070A] shadow-sm"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Layers className="h-3 w-3" />
+                  <span>Engineer Pro Mode</span>
+                </button>
+              </div>
+
+              {/* 30-Second Judge Auto-Pilot Tour Trigger */}
               <button
                 type="button"
-                onClick={() => onOpenHardwareStudio("DBC_INSPECTOR")}
-                className="flex items-center gap-1.5 rounded-md border border-[#00E5FF]/40 bg-[#0B0E14] px-2.5 py-1.5 font-mono text-xs text-[#00E5FF] transition hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 cursor-pointer"
+                onClick={onStartGuidedTour}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-mono text-xs font-bold transition cursor-pointer ${
+                  guidedTourStep
+                    ? "border-[#00FF9D] bg-[#00FF9D] text-[#06070A] shadow-[0_0_20px_rgba(0,255,157,0.35)]"
+                    : "border-[#FFB800]/65 bg-[#FFB800]/15 text-[#FFB800] hover:bg-[#FFB800]/25"
+                }`}
               >
-                <Binary className="h-3.5 w-3.5" />
-                <span>.DBC 64-Bit</span>
+                <Play className="h-3.5 w-3.5 fill-current" />
+                <span>
+                  {guidedTourStep
+                    ? `Tour Step ${guidedTourStep}/5`
+                    : "▶ Run 30s Guided Demo"}
+                </span>
               </button>
+
+              {/* Kiro Architecture & PBT Proofs Drawer Button */}
+              <button
+                type="button"
+                onClick={onOpenKiroDrawer}
+                className="flex items-center gap-1.5 rounded-lg border border-[#00FF9D]/40 bg-[#0B0E14] px-2.5 py-1.5 font-mono text-xs text-[#00FF9D] transition hover:border-[#00FF9D] hover:bg-[#00FF9D]/10 cursor-pointer"
+              >
+                <ShieldCheck className="h-3.5 w-3.5" />
+                <span>Kiro Architecture &amp; PBT Proofs</span>
+              </button>
+
+              {viewMode === "PRO" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onOpenHardwareStudio("DBC_INSPECTOR")}
+                    className="flex items-center gap-1.5 rounded-md border border-[#00E5FF]/40 bg-[#0B0E14] px-2.5 py-1.5 font-mono text-xs text-[#00E5FF] transition hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 cursor-pointer"
+                  >
+                    <Binary className="h-3.5 w-3.5" />
+                    <span>.DBC 64-Bit</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => onOpenHardwareStudio("WEBSERIAL_DRAWER")}
+                    className="flex items-center gap-1.5 rounded-md border border-purple-400/45 bg-[#0B0E14] px-2.5 py-1.5 font-mono text-xs text-purple-300 transition hover:border-purple-400 hover:bg-purple-500/10 cursor-pointer"
+                  >
+                    <Cable className="h-3.5 w-3.5" />
+                    <span>OBD-II USB/BT</span>
+                  </button>
+                </>
+              )}
 
               <button
                 type="button"
@@ -236,27 +337,33 @@ export function TopCommandBar({
 
               <button
                 type="button"
-                onClick={() => onOpenHardwareStudio("WEBSERIAL_DRAWER")}
-                className="flex items-center gap-1.5 rounded-md border border-[#00FF9D]/45 bg-[#0B0E14] px-2.5 py-1.5 font-mono text-xs text-[#00FF9D] transition hover:border-[#00FF9D] hover:bg-[#00FF9D]/10 cursor-pointer"
-              >
-                <Cable className="h-3.5 w-3.5" />
-                <span>OBD-II USB/BT</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={openModal}
-                className="flex items-center gap-1.5 rounded-md border border-[#00E5FF]/40 bg-[#0B0E14] px-3 py-1.5 font-mono text-xs text-[#00E5FF] transition hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 cursor-pointer"
+                className="flex items-center gap-1.5 rounded-md border border-[#00E5FF]/40 bg-[#0B0E14] px-2.5 py-1.5 font-mono text-xs text-[#00E5FF] transition hover:border-[#00E5FF] hover:bg-[#00E5FF]/10 cursor-pointer"
               >
                 <Search className="h-3.5 w-3.5" />
-                <span>VIN: {activeVin}</span>
+                <span>VIN: {activeVin.slice(0, 8)}…</span>
                 <span className="rounded bg-[#00E5FF]/15 px-1.5 py-0.5 text-[10px]">NHTSA</span>
+              </button>
+
+              {/* WebAudio Mute/Unmute Icon Toggle */}
+              <button
+                type="button"
+                onClick={onToggleSoundMuted}
+                aria-label={soundMuted ? "Unmute tactile audio" : "Mute tactile audio"}
+                title={soundMuted ? "Unmute WebAudio Synthesizer" : "Mute WebAudio Synthesizer"}
+                className={`flex items-center gap-1 rounded-md border px-2.5 py-1.5 font-mono text-xs transition cursor-pointer ${
+                  soundMuted
+                    ? "border-white/15 bg-[#0B0E14] text-slate-400 hover:text-white"
+                    : "border-[#00E5FF]/50 bg-[#00E5FF]/12 text-[#00E5FF]"
+                }`}
+              >
+                {soundMuted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
               </button>
 
               <button
                 type="button"
                 onClick={onToggleCrt}
-                className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 font-mono text-xs transition cursor-pointer ${
+                className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 font-mono text-xs transition cursor-pointer ${
                   crtEnabled
                     ? "border-[#00FF9D]/60 bg-[#00FF9D]/15 text-[#00FF9D]"
                     : "border-white/15 bg-[#0B0E14] text-slate-400 hover:text-white"
@@ -274,12 +381,12 @@ export function TopCommandBar({
               displayedSouls.length === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4"
             } gap-2 pt-1`}
           >
-            {displayedSouls.map((soul) => {
+            {displayedSouls.map((soul, idx) => {
               const active = soul.id === activeVehicleId;
               const isCustom = soul.id === "CUSTOM_VIN_SOUL";
               return (
                 <button
-                  key={soul.id}
+                  key={`${soul.id}-${idx}`}
                   type="button"
                   onClick={() => onSelectVehicle(soul.id)}
                   className={`flex flex-col items-start rounded-lg border px-3 py-2 text-left transition cursor-pointer ${
@@ -356,15 +463,15 @@ export function TopCommandBar({
 
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { label: "2020 Mustang GT 5.0", vin: "1FA6P8CF5L5109284" },
-                    { label: "2022 Accord 2.0T", vin: "1HGCV2F34NA012481" },
+                    { label: "NA 5.0L V8 Coupe Sample", vin: "1FA6P8CF5L5109284" },
+                    { label: "2.0L Turbo Sedan Sample", vin: "1HGCV2F34NA012481" },
                     ...VEHICLE_SOUL_LIST.map((p) => ({
                       label: p.codename,
                       vin: p.defaultVin,
                     })),
-                  ].map((item) => (
+                  ].map((item, idx) => (
                     <button
-                      key={item.vin}
+                      key={`${item.vin}-${idx}`}
                       type="button"
                       onClick={() => void handleDecodeVin(item.vin)}
                       className="rounded border border-white/10 bg-white/5 px-2 py-1 font-mono text-[10px] text-slate-300 hover:border-[#00FF9D]/50 hover:text-[#00FF9D] cursor-pointer"

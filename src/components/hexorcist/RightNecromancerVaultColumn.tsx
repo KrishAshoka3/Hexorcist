@@ -29,6 +29,9 @@ export interface EscrowLedgerEntry {
 }
 
 interface RightNecromancerVaultColumnProps {
+  viewMode: "FOCUSED" | "PRO";
+  activeWorkflowStep?: 1 | 2 | 3;
+  tourSpotlightPanel?: string | null;
   activeDtc: string;
   onChangeCustomDtc: (code: string) => void;
   autopsyLoading: boolean;
@@ -44,6 +47,9 @@ interface RightNecromancerVaultColumnProps {
 }
 
 export function RightNecromancerVaultColumn({
+  viewMode,
+  activeWorkflowStep,
+  tourSpotlightPanel,
   activeDtc,
   onChangeCustomDtc,
   autopsyLoading,
@@ -58,20 +64,36 @@ export function RightNecromancerVaultColumn({
   onReleaseMechanicEscrow,
 }: RightNecromancerVaultColumnProps) {
   const [releaseModalOpen, setReleaseModalOpen] = useState(false);
-  const [shopName, setShopName] = useState("Stuttgart & Tsukuba Master Motorsport LLC");
+  const [shopName, setShopName] = useState("Certified Autonomous Drivetrain Lab LLC");
   const [releaseUsdInput, setReleaseUsdInput] = useState("");
 
-  let bitmask = inspectDTCBitmask("P17D8");
+  let bitmask = inspectDTCBitmask("P0750");
   try {
     bitmask = inspectDTCBitmask(activeDtc);
   } catch {
     bitmask = inspectDTCBitmask("P0300");
   }
 
+  const autopsyHighlighted =
+    tourSpotlightPanel === "VERTEX_AUTOPSY" ||
+    (!tourSpotlightPanel && viewMode === "FOCUSED" && activeWorkflowStep === 2);
+  const escrowHighlighted =
+    tourSpotlightPanel === "ESCROW_VAULT" ||
+    (!tourSpotlightPanel && viewMode === "FOCUSED" && activeWorkflowStep === 3);
+
+  const dimAutopsy = Boolean(tourSpotlightPanel && tourSpotlightPanel !== "VERTEX_AUTOPSY");
+  const dimEscrow = Boolean(tourSpotlightPanel && tourSpotlightPanel !== "ESCROW_VAULT");
+
   return (
     <aside className="flex flex-col gap-4">
       {/* SAE J2012 Bitmask Inspector & Vertex AI Necromancer */}
-      <div className="rounded-xl border border-[#00E5FF]/30 bg-[#0A0D14]/90 p-3.5 space-y-3">
+      <div
+        className={`rounded-xl border bg-[#0A0D14]/90 p-3.5 space-y-3 transition-all duration-300 ${
+          autopsyHighlighted
+            ? "border-[#00E5FF] ring-2 ring-[#00E5FF]/60 shadow-[0_0_32px_rgba(0,229,255,0.28)]"
+            : "border-[#00E5FF]/30"
+        } ${dimAutopsy ? "opacity-45" : "opacity-100"}`}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BrainCircuit className="h-4 w-4 text-[#00E5FF]" />
@@ -84,13 +106,42 @@ export function RightNecromancerVaultColumn({
           </span>
         </div>
 
-        {/* SAE J2012 16-Bit Bitmask Inspector */}
-        <div className="rounded-lg border border-white/10 bg-[#05070B] p-2.5 font-mono text-[11px] space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5 text-[10px] text-slate-400">
-              <Binary className="h-3.5 w-3.5 text-[#FFB800]" />
-              SAE J2012 2-BYTE DTC BITMASK
-            </span>
+        {/* SAE J2012 16-Bit Bitmask Inspector (Unfolded in Engineer Pro Mode) */}
+        {viewMode === "PRO" ? (
+          <div className="rounded-lg border border-white/10 bg-[#05070B] p-2.5 font-mono text-[11px] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[10px] text-slate-400">
+                <Binary className="h-3.5 w-3.5 text-[#FFB800]" />
+                SAE J2012 2-BYTE DTC BITMASK
+              </span>
+              <input
+                type="text"
+                maxLength={5}
+                value={activeDtc}
+                onChange={(e) => onChangeCustomDtc(e.target.value.toUpperCase())}
+                className="w-20 rounded border border-white/15 bg-black px-2 py-0.5 text-center font-mono text-xs font-bold text-[#FFB800] outline-none focus:border-[#00E5FF]"
+              />
+            </div>
+
+            <div className="rounded bg-white/[0.04] px-2 py-1.5 text-center text-xs tracking-widest text-[#00FF9D]">
+              {bitmask.binary16}{" "}
+              <span className="text-[#00E5FF]">({bitmask.hexPair})</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300">
+              <div className="rounded bg-white/[0.03] p-1.5">
+                <span className="text-slate-500">DOMAIN [{bitmask.domainBits}]:</span>{" "}
+                <div className="truncate font-semibold text-white">{bitmask.domainLabel}</div>
+              </div>
+              <div className="rounded bg-white/[0.03] p-1.5">
+                <span className="text-slate-500">TYPE [{bitmask.subTypeBits}]:</span>{" "}
+                <div className="truncate font-semibold text-white">{bitmask.subTypeLabel}</div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between rounded-lg border border-white/10 bg-[#05070B] px-3 py-2 font-mono text-xs">
+            <span className="text-slate-400">Active Trouble Code:</span>
             <input
               type="text"
               maxLength={5}
@@ -99,23 +150,7 @@ export function RightNecromancerVaultColumn({
               className="w-20 rounded border border-white/15 bg-black px-2 py-0.5 text-center font-mono text-xs font-bold text-[#FFB800] outline-none focus:border-[#00E5FF]"
             />
           </div>
-
-          <div className="rounded bg-white/[0.04] px-2 py-1.5 text-center text-xs tracking-widest text-[#00FF9D]">
-            {bitmask.binary16}{" "}
-            <span className="text-[#00E5FF]">({bitmask.hexPair})</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5 text-[10px] text-slate-300">
-            <div className="rounded bg-white/[0.03] p-1.5">
-              <span className="text-slate-500">DOMAIN [{bitmask.domainBits}]:</span>{" "}
-              <div className="truncate font-semibold text-white">{bitmask.domainLabel}</div>
-            </div>
-            <div className="rounded bg-white/[0.03] p-1.5">
-              <span className="text-slate-500">TYPE [{bitmask.subTypeBits}]:</span>{" "}
-              <div className="truncate font-semibold text-white">{bitmask.subTypeLabel}</div>
-            </div>
-          </div>
-        </div>
+        )}
 
         <button
           type="button"
@@ -173,7 +208,13 @@ export function RightNecromancerVaultColumn({
           </motion.div>
         )}
       </div>
-      <div className="rounded-xl border border-[#00FF9D]/35 bg-[#0A0D14]/90 p-3.5 space-y-3 phosphor-glow">
+      <div
+        className={`rounded-xl border bg-[#0A0D14]/90 p-3.5 space-y-3 transition-all duration-300 ${
+          escrowHighlighted
+            ? "border-[#00FF9D] ring-2 ring-[#00FF9D]/65 shadow-[0_0_36px_rgba(0,255,157,0.3)]"
+            : "border-[#00FF9D]/35 phosphor-glow"
+        } ${dimEscrow ? "opacity-45" : "opacity-100"}`}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Lock className="h-4 w-4 text-[#00FF9D]" />
@@ -182,7 +223,7 @@ export function RightNecromancerVaultColumn({
             </h2>
           </div>
           <span className="rounded bg-[#00FF9D]/15 px-2 py-0.5 font-mono text-[10px] text-[#00FF9D]">
-            STRIPE SANDBOX
+            FINTECH SANDBOX
           </span>
         </div>
 
@@ -240,12 +281,12 @@ export function RightNecromancerVaultColumn({
 
         <div className="space-y-1.5">
           <div className="font-mono text-[10px] uppercase text-slate-400">
-            Immutable Stripe Sandbox Ledger
+            Autonomous FinTech Escrow Sandbox Ledger
           </div>
           <div className="h-44 overflow-y-auto rounded-lg border border-white/10 bg-[#050608] p-2 font-mono text-[10px] space-y-1.5">
-            {ledgerEntries.map((item) => (
+            {ledgerEntries.map((item, idx) => (
               <div
-                key={item.id}
+                key={`${item.id}-${idx}`}
                 className="rounded border border-white/5 bg-white/[0.02] p-2 space-y-0.5"
               >
                 <div className="flex items-center justify-between">

@@ -63,6 +63,12 @@ interface CsvPlaybackScrubberBarProps {
   onExitReplay?: () => void;
 }
 
+let modalLogCounter = 0;
+const nextModalLogId = (prefix: string): string => {
+  modalLogCounter = (modalLogCounter + 1) % 1_000_000;
+  return `${prefix}-${Date.now()}-${modalLogCounter}-${Math.random().toString(36).slice(2, 7)}`;
+};
+
 export function CsvPlaybackScrubberBar({
   frames,
   cursor,
@@ -122,9 +128,9 @@ export function CsvPlaybackScrubberBar({
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
 
-          {([1, 2, 5] as PlaybackSpeedMultiplier[]).map((mult) => (
+          {([1, 2, 5] as PlaybackSpeedMultiplier[]).map((mult, idx) => (
             <button
-              key={mult}
+              key={`${mult}-${idx}`}
               type="button"
               onClick={() => onChangeSpeed(mult)}
               className={`rounded-md border px-2 py-1 text-[11px] font-bold transition cursor-pointer ${
@@ -346,7 +352,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
     setHandshakeStepIdx(0);
     setTerminalLines([
       {
-        id: `sys-boot-${Date.now()}`,
+        id: nextModalLogId("sys-boot"),
         timestamp: nowTerminalClock(),
         kind: "SYS",
         text: `Opening UART Bridge -> ${modeTitle} @ 38,400 baud (8N1)...`,
@@ -359,13 +365,13 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
         setTerminalLines((prev) => [
           ...prev,
           {
-            id: `tx-init-${idx}-${Date.now()}`,
+            id: nextModalLogId(`tx-init-${idx}`),
             timestamp: nowTerminalClock(),
             kind: "TX",
             text: `> ${step.cmd}`,
           },
           {
-            id: `rx-init-${idx}-${Date.now()}`,
+            id: nextModalLogId(`rx-init-${idx}`),
             timestamp: nowTerminalClock(),
             kind: "RX",
             text: step.rx,
@@ -393,7 +399,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
       setTerminalLines((prev) => [
         ...prev,
         {
-          id: `sys-warn-${Date.now()}`,
+          id: nextModalLogId("sys-warn"),
           timestamp: nowTerminalClock(),
           kind: "SYS",
           text: "No physical COM port paired — click 'Virtual Loopback COM Port' to test interactive AT/Hex commands.",
@@ -410,7 +416,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
     setTerminalLines((prev) => [
       ...prev,
       {
-        id: `tx-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        id: nextModalLogId("tx"),
         timestamp: nowTerminalClock(),
         kind: "TX",
         text: `> ${cmd}`,
@@ -423,7 +429,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
         setTerminalLines((prev) => [
           ...prev,
           {
-            id: `sys-tx-${Date.now()}`,
+            id: nextModalLogId("sys-tx"),
             timestamp: nowTerminalClock(),
             kind: "SYS",
             text: `Dispatched '${cmd}\\r' over physical WebSerial UART`,
@@ -454,7 +460,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
     setTerminalLines((prev) => [
       ...prev,
       ...result.rxLines.map((line, i) => ({
-        id: `rx-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+        id: nextModalLogId(`rx-${i}`),
         timestamp: nowTerminalClock(),
         kind: "RX" as const,
         text: line,
@@ -575,10 +581,10 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                   >
                     <Upload className="mx-auto h-8 w-8 text-[#FFB800]" />
                     <h3 className="mt-2 text-sm font-bold text-white">
-                      Drop Any Real-World Telemetry .CSV Log Here
+                      Drop Any ISO 15765-4 / SAE J1979 CAN Telemetry CSV Log Here
                     </h3>
                     <p className="mt-1 text-xs text-slate-400">
-                      Supports OBDeleven, Ross-Tech VCDS, Torque Pro, Cobb Accessport &amp; HEXORCIST 100-Row WOT Logs
+                      Supports ISO 15765-4 Raw CAN Frames, SAE J1979 Multi-PID Exports &amp; HEXORCIST 100-Row WOT Logs
                     </p>
 
                     <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
@@ -588,7 +594,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                         className="flex items-center gap-2 rounded-lg bg-[#00FF9D] px-4 py-2 text-xs font-bold text-[#06070A] hover:bg-[#00FF9D]/90 cursor-pointer"
                       >
                         <Sparkles className="h-4 w-4" />
-                        <span>Load Built-In Sample OBDeleven/VCDS Log</span>
+                        <span>ISO 15765-4 / SAE J1979 CAN Telemetry CSV</span>
                       </button>
 
                       <button
@@ -639,7 +645,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                     <div className="rounded-lg border border-white/10 bg-[#05070B] p-4 text-center text-xs text-slate-400">
                       No CSV log loaded yet — click{" "}
                       <span className="font-bold text-[#00FF9D]">
-                        &ldquo;Load Built-In Sample OBDeleven/VCDS Log&rdquo;
+                        &ldquo;ISO 15765-4 / SAE J1979 CAN Telemetry CSV&rdquo;
                       </span>{" "}
                       above to replay a 100-row WOT pull with a mid-pull mechanical fault anomaly!
                     </div>
@@ -653,14 +659,14 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                     <div className="flex flex-wrap items-center gap-1.5">
                       {(
                         [
-                          ["GERMAN_V6_DSG", "Audi/VW 0B5_TCM"],
-                          ["JDM_TWIN_ROTARY", "Mazda FD3S_ECU"],
-                          ["AWD_800V_EV", "EV BMS_HV_Status"],
-                          ["HEAVY_DIESEL_TOW", "Diesel J1939_EEC1"],
+                          ["GERMAN_V6_DSG", "Euro V6 0B5_TCM"],
+                          ["JDM_TWIN_ROTARY", "13B-REW FD3S_ECU"],
+                          ["AWD_800V_EV", "800V EV BMS_HV_Status"],
+                          ["HEAVY_DIESEL_TOW", "6.7L Diesel J1939_EEC1"],
                         ] as Array<[VehicleArchitectureId, string]>
-                      ).map(([id, label]) => (
+                      ).map(([id, label], idx) => (
                         <button
-                          key={id}
+                          key={`${id}-${idx}`}
                           type="button"
                           onClick={() => {
                             setMatrixOverride(id);
@@ -713,12 +719,12 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                       </div>
 
                       <div className="space-y-1.5">
-                        {activeMatrix.signals.map((sig) => {
+                        {activeMatrix.signals.map((sig, idx) => {
                           const isFocused = activeSignal.name === sig.name;
                           const decoded = decodeDbcSignalEngineering(payloadBytes, sig);
                           return (
                             <div
-                              key={sig.name}
+                              key={`${sig.name}-${idx}`}
                               onMouseEnter={() => setHoveredSignalName(sig.name)}
                               onClick={() => setHoveredSignalName(sig.name)}
                               className={`rounded-lg border p-2.5 transition cursor-pointer ${
@@ -762,25 +768,28 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
 
                         <div className="grid grid-cols-9 gap-1.5 text-center text-[10px] text-slate-400">
                           <div className="text-left font-bold text-slate-500">BYTE</div>
-                          {[7, 6, 5, 4, 3, 2, 1, 0].map((bitCol) => (
-                            <div key={bitCol}>b{bitCol}</div>
+                          {[7, 6, 5, 4, 3, 2, 1, 0].map((bitCol, colIdx) => (
+                            <div key={`bitcol-${bitCol}-${colIdx}`}>b{bitCol}</div>
                           ))}
                         </div>
 
                         <div className="space-y-1.5">
                           {payloadBytes.map((byteVal, byteIdx) => (
-                            <div key={byteIdx} className="grid grid-cols-9 gap-1.5 items-center">
+                            <div
+                              key={`byte-${byteVal}-${byteIdx}`}
+                              className="grid grid-cols-9 gap-1.5 items-center"
+                            >
                               <div className="text-[11px] font-bold text-slate-300">
                                 B{byteIdx}{" "}
                                 <span className="text-[#FFB800]">0x{toHexByte(byteVal)}</span>
                               </div>
-                              {[7, 6, 5, 4, 3, 2, 1, 0].map((bitInByte) => {
+                              {[7, 6, 5, 4, 3, 2, 1, 0].map((bitInByte, bitIdx) => {
                                 const dbcBit = byteIdx * 8 + bitInByte;
                                 const bitVal = (byteVal >> bitInByte) & 1;
                                 const isHighlighted = highlightedBitSet.has(dbcBit);
                                 return (
                                   <button
-                                    key={dbcBit}
+                                    key={`dbcbit-${dbcBit}-${bitIdx}`}
                                     type="button"
                                     onClick={() => flipManualBit(byteIdx, bitInByte)}
                                     onMouseEnter={() => {
@@ -929,7 +938,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                         const done = handshakeStepIdx > idx;
                         return (
                           <div
-                            key={step.cmd}
+                            key={`${step.cmd}-${idx}`}
                             className={`rounded-lg border px-2.5 py-2 text-[11px] ${
                               done
                                 ? "border-[#00FF9D]/45 bg-[#00FF9D]/10 text-[#00FF9D]"
@@ -966,9 +975,9 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                           ["22 F4 0A", "22 F4 0A DSG"],
                           ["22 11 40", "22 11 40 Boost"],
                           ["09 02", "09 02 VIN"],
-                        ].map(([cmd, label]) => (
+                        ].map(([cmd, label], idx) => (
                           <button
-                            key={cmd}
+                            key={`${cmd}-${idx}`}
                             type="button"
                             onClick={() => void handleDispatchTerminalCommand(cmd)}
                             className="rounded border border-white/15 bg-white/5 px-2 py-1 text-[10px] text-slate-200 hover:border-[#00E5FF] hover:text-[#00E5FF] cursor-pointer"
@@ -980,8 +989,8 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                     </div>
 
                     <div className="h-64 overflow-y-auto rounded-lg border border-white/10 bg-[#030406] p-3 text-xs space-y-1.5">
-                      {terminalLines.map((line) => (
-                        <div key={line.id} className="leading-relaxed">
+                      {terminalLines.map((line, idx) => (
+                        <div key={`${line.id}-${idx}`} className="leading-relaxed">
                           <div className="flex items-start justify-between gap-2">
                             <span
                               className={

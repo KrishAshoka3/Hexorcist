@@ -46,15 +46,15 @@ describe("HEXORCIST Phase 2 — CSV Log Replay, OpenDBC 64-Bit Matrix & ELM327 S
     }
   });
 
-  it("Universal CSV parser handles Torque Pro / VCDS exports and survives fast-check fuzzing", () => {
-    const torqueProSample = [
+  it("Universal CSV parser handles generic ISO 15765-4 / SAE J1979 multi-PID exports and survives fast-check fuzzing", () => {
+    const genericMultiPidSample = [
       "Device Time,Engine RPM(rpm),Speed (OBD)(km/h),Engine Coolant Temperature(C),Short term fuel trim Bank 1(%),Control module voltage(V)",
       "0.10,2450,62,89,1.5,14.22",
       "0.20,3820,88,91,3.2,14.15",
       "0.30,5490,119,95,24.8,13.88",
     ].join("\n");
 
-    const frames = parseTelemetryCSV(torqueProSample);
+    const frames = parseTelemetryCSV(genericMultiPidSample);
     expect(frames).toHaveLength(3);
     expect(frames[2].rpm).toBe(5490);
     expect(parseRawCANFrame(frames[2].rawHexFrame).valid).toBe(true);
@@ -104,21 +104,21 @@ describe("HEXORCIST Phase 2 — CSV Log Replay, OpenDBC 64-Bit Matrix & ELM327 S
   it("Synthesizes CUSTOM_VIN_SOUL and responds to Virtual Loopback ELM327 AT/Hex commands", () => {
     const customSoul = buildCustomVinSoul({
       vin: "1FA6P8CF5L5109284",
-      make: "FORD",
-      model: "Mustang GT",
+      make: "NA_POWERTRAIN",
+      model: "5.0L V8 Fastback",
       modelYear: "2020",
       bodyClass: "Coupe",
       engineInfo: "5.0L 8-Cyl 460 HP",
       fuelType: "Gasoline",
       driveType: "RWD",
-      plantInfo: "Flat Rock, UNITED STATES",
+      plantInfo: "North American Assembly",
       displacementL: "5.0",
       cylinders: "8",
       horsepower: "460",
     });
 
     expect(customSoul.id).toBe("CUSTOM_VIN_SOUL");
-    expect(customSoul.yearMakeModel).toBe("2020 FORD Mustang GT");
+    expect(customSoul.yearMakeModel).toBe("2020 NA_POWERTRAIN 5.0L V8 Fastback");
     expect(customSoul.curses.length).toBeGreaterThanOrEqual(2);
 
     const ctx = {
@@ -132,5 +132,21 @@ describe("HEXORCIST Phase 2 — CSV Log Replay, OpenDBC 64-Bit Matrix & ELM327 S
     expect(processVirtualElm327Command("22 F4 0A", ctx).rxLines[0]).toMatch(/^7E8 05 62 F4 0A/);
     expect(processVirtualElm327Command("03", ctx).rxLines[0]).toMatch(/^7E8 04 43 01/);
     expect(processVirtualElm327Command("04", ctx).clearedFaults).toBe(true);
+  });
+
+  it("Enforces Phase 3 trademark-clean engineering labels across all 4 Vehicle Souls", () => {
+    expect(VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG.yearMakeModel).toBe(
+      "Euro 3.0L Supercharged V6 + 7-Speed DSG (0B5)"
+    );
+    expect(VEHICLE_SOUL_PRESETS.JDM_TWIN_ROTARY.yearMakeModel).toBe(
+      "JDM 1.3L Twin-Turbo Rotary (13B-REW)"
+    );
+    expect(VEHICLE_SOUL_PRESETS.AWD_800V_EV.yearMakeModel).toBe(
+      "800V Dual-Motor SiC Inverter EV Sedan"
+    );
+    expect(VEHICLE_SOUL_PRESETS.HEAVY_DIESEL_TOW.yearMakeModel).toBe(
+      "6.7L High-Output Turbo-Diesel Tow Rig"
+    );
+    expect(VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG.curses[0].dtcCode).toBe("P0750");
   });
 });

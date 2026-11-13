@@ -460,7 +460,7 @@ export function generateSampleCSV(
 
   return rows.join("\n");
 }
-// 3. UNIVERSAL CSV TELEMETRY PARSER (OBDeleven / VCDS / Torque Pro / HEXORCIST)
+// 3. UNIVERSAL CSV TELEMETRY PARSER (ISO 15765-4 / SAE J1979 / Multi-PID Telemetry CSV)
 
 export interface TelemetryPlaybackFrame {
   index: number;
@@ -939,9 +939,9 @@ const FD3S_SIGNALS: DbcSignalDefinition[] = [
     min: -14.7,
     max: 50.8,
     unit: "PSI",
-    receiver: "Apexi_Logger",
-    description: "Sequential Hitachi HT-12 Intake Plenum Gauge Pressure",
-    sgSyntax: 'SG_ Manifold_Boost_PSI : 16|16@1+ (0.001,-14.7) [-14.7|50.8] "PSI" Apexi_Logger',
+    receiver: "CAN_Logger",
+    description: "Sequential HT-12 Twin-Turbo Intake Plenum Gauge Pressure",
+    sgSyntax: 'SG_ Manifold_Boost_PSI : 16|16@1+ (0.001,-14.7) [-14.7|50.8] "PSI" CAN_Logger',
   },
   {
     name: "Rotor_Housing_Coolant_C",
@@ -1199,7 +1199,7 @@ const J1939_EEC1_SIGNALS: DbcSignalDefinition[] = [
     max: 8031.875,
     unit: "RPM",
     receiver: "TCM_AS69RC",
-    description: "SAE J1939 SPN 190 6.7L Cummins Crankshaft Speed (0.125 RPM/bit)",
+    description: "SAE J1939 SPN 190 6.7L High-Output Diesel Crankshaft Speed (0.125 RPM/bit)",
     sgSyntax: 'SG_ EngSpeed_SPN190 : 24|16@1+ (0.125,0) [0|8031.875] "RPM" TCM_AS69RC',
   },
   {
@@ -1218,7 +1218,7 @@ const J1939_EEC1_SIGNALS: DbcSignalDefinition[] = [
     sgSyntax: 'SG_ DPF_Monolith_Soot_Pct : 40|8@1+ (0.392157,0) [0|100] "%" Aftertreatment',
   },
   {
-    name: "Holset_VGT_Vane_Pos_Pct",
+    name: "VGT_Nozzle_Vane_Pos_Pct",
     startBit: 48,
     length: 8,
     byteOrder: "INTEL_LE",
@@ -1230,7 +1230,7 @@ const J1939_EEC1_SIGNALS: DbcSignalDefinition[] = [
     unit: "%",
     receiver: "VGT_SmartAct",
     description: "Variable Geometry Turbocharger Sliding Nozzle Position",
-    sgSyntax: 'SG_ Holset_VGT_Vane_Pos_Pct : 48|8@1+ (0.4,0) [0|102] "%" VGT_SmartAct',
+    sgSyntax: 'SG_ VGT_Nozzle_Vane_Pos_Pct : 48|8@1+ (0.4,0) [0|102] "%" VGT_SmartAct',
   },
   {
     name: "Exhaust_Backpressure_PSI",
@@ -1257,7 +1257,7 @@ export const SAMPLE_DBC_MATRICES: Record<VehicleArchitectureId, DbcMessageMatrix
     canIdHex: "0x440",
     dlcBytes: 8,
     transmitterNode: "TCU_DL501",
-    protocolStandard: "VAG Antriebs-CAN 500kbps (11-bit)",
+    protocolStandard: "ISO 11898-2 Euro Powertrain CAN 500kbps (11-bit)",
     boSyntax: "BO_ 1088 0B5_TCM: 8 TCU_DL501",
     rawDbcText: buildRawDbcBlock("BO_ 1088 0B5_TCM: 8 TCU_DL501", DSG_SIGNALS),
     defaultPayloadBytes: [0x2e, 0x09, 0x02, 0x21, 0x31, 0xb0, 0xa7, 0xe4],

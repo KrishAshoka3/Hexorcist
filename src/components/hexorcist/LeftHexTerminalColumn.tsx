@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
   AlertTriangle,
   Binary,
   Cable,
+  ChevronDown,
+  ChevronUp,
   Download,
   Flame,
   Pause,
@@ -18,6 +20,7 @@ import {
   MechanicalCursePreset,
   ParsedCANFrame,
   VehicleSoulPreset,
+  inspectDTCBitmask,
 } from "@/lib/obd-hex-engine";
 import { ConnectionMode } from "./TopCommandBar";
 
@@ -29,6 +32,11 @@ export interface FrameLogEntry {
 }
 
 interface LeftHexTerminalColumnProps {
+  viewMode: "FOCUSED" | "PRO";
+  activeWorkflowStep?: 1 | 2 | 3;
+  tourSpotlightPanel?: string | null;
+  forceOpenHexDrawer?: boolean;
+  activeDtc: string;
   soul: VehicleSoulPreset;
   frames: FrameLogEntry[];
   selectedFrame: FrameLogEntry | null;
@@ -49,6 +57,11 @@ interface LeftHexTerminalColumnProps {
 }
 
 export function LeftHexTerminalColumn({
+  viewMode,
+  activeWorkflowStep,
+  tourSpotlightPanel,
+  forceOpenHexDrawer,
+  activeDtc,
   soul,
   frames,
   selectedFrame,
@@ -68,35 +81,92 @@ export function LeftHexTerminalColumn({
   onOpenDbcInspector,
 }: LeftHexTerminalColumnProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [proDrawerOpen, setProDrawerOpen] = useState(false);
   const inspected = selectedFrame ?? frames[0] ?? null;
 
+  let bitmask = inspectDTCBitmask("P0750");
+  try {
+    bitmask = inspectDTCBitmask(activeDtc);
+  } catch {
+    bitmask = inspectDTCBitmask("P0300");
+  }
+
+  const isHighlighted =
+    tourSpotlightPanel === "FAULT_HEX" ||
+    (!tourSpotlightPanel && viewMode === "FOCUSED" && activeWorkflowStep === 1);
+  const isDimmed = Boolean(tourSpotlightPanel && tourSpotlightPanel !== "FAULT_HEX");
+  const showHexMatrixExpanded = viewMode === "PRO" || proDrawerOpen || Boolean(forceOpenHexDrawer);
+
   return (
-    <aside className="flex flex-col gap-4">
-      <div className="rounded-xl border border-white/10 bg-[#0A0D14]/90 p-3.5 shadow-2xl">
-        <div className="mb-2.5 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-[#00FF9D]" />
-            <h2 className="font-mono text-xs font-bold uppercase tracking-wider text-white">
-              25Hz Raw CAN Hex Matrix
-            </h2>
-          </div>
+    <aside
+      className={`flex flex-col gap-4 transition-all duration-300 ${
+        isHighlighted
+          ? "rounded-2xl ring-2 ring-[#00FF9D]/70 shadow-[0_0_36px_rgba(0,255,157,0.26)] p-1"
+          : ""
+      } ${isDimmed ? "opacity-45" : "opacity-100"}`}
+    >
+      {viewMode === "FOCUSED" && (
+        <div className="rounded-xl border border-[#00E5FF]/30 bg-[#0A0D14]/90 p-3 font-mono">
           <button
             type="button"
-            onClick={onTogglePause}
-            className="flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 font-mono text-[11px] text-slate-300 hover:border-[#00FF9D]/50 hover:text-[#00FF9D] cursor-pointer"
+            onClick={() => setProDrawerOpen((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 text-left text-xs font-bold text-[#00E5FF] hover:text-[#00FF9D] cursor-pointer"
           >
-            {streamPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-            <span>{streamPaused ? "RESUME" : "FREEZE"}</span>
+            <span className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 shrink-0 text-[#00FF9D]" />
+              <span>Inspect Raw CAN Hex Stream &amp; J2012 Bitmask (Pro)</span>
+            </span>
+            {showHexMatrixExpanded ? (
+              <ChevronUp className="h-4 w-4 shrink-0" />
+            ) : (
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            )}
           </button>
+
+          {showHexMatrixExpanded && (
+            <div className="mt-2.5 rounded-lg border border-white/10 bg-[#05070B] p-2.5 text-[11px] space-y-1.5">
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span>SAE J2012 16-BIT DTC BITMASK ({activeDtc})</span>
+                <span className="text-[#00E5FF] font-bold">{bitmask.hexPair}</span>
+              </div>
+              <div className="rounded bg-white/[0.04] px-2 py-1 text-center text-xs tracking-widest text-[#00FF9D]">
+                {bitmask.binary16}
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-slate-400">
+                <span>Domain [{bitmask.domainBits}]: {bitmask.domainLabel}</span>
+                <span>Type [{bitmask.subTypeBits}]</span>
+              </div>
+            </div>
+          )}
         </div>
+      )}
+
+      {showHexMatrixExpanded && (
+        <div className="rounded-xl border border-white/10 bg-[#0A0D14]/90 p-3.5 shadow-2xl">
+          <div className="mb-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-[#00FF9D]" />
+              <h2 className="font-mono text-xs font-bold uppercase tracking-wider text-white">
+                25Hz Raw CAN Hex Matrix
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={onTogglePause}
+              className="flex items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 font-mono text-[11px] text-slate-300 hover:border-[#00FF9D]/50 hover:text-[#00FF9D] cursor-pointer"
+            >
+              {streamPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+              <span>{streamPaused ? "RESUME" : "FREEZE"}</span>
+            </button>
+          </div>
 
         <div className="h-52 overflow-y-auto rounded-lg border border-white/10 bg-[#050608] p-2 font-mono text-[11px] space-y-1">
-          {frames.map((entry) => {
+          {frames.map((entry, idx) => {
             const isSelected = inspected?.id === entry.id;
             const warn = entry.parsed.isWarning;
             return (
               <div
-                key={entry.id}
+                key={`${entry.id}-${idx}`}
                 onClick={() => onSelectFrame(entry)}
                 onMouseEnter={() => {
                   if (streamPaused) onSelectFrame(entry);
@@ -184,6 +254,7 @@ export function LeftHexTerminalColumn({
           </div>
         )}
       </div>
+      )}
       {/* Cast Mechanical Curse Deck */}
       <div
         className={`rounded-xl border p-3.5 transition ${
@@ -211,11 +282,11 @@ export function LeftHexTerminalColumn({
         </div>
 
         <div className="space-y-2">
-          {soul.curses.map((curse) => {
+          {soul.curses.map((curse, idx) => {
             const isCursed = activeCurse?.id === curse.id;
             return (
               <button
-                key={curse.id}
+                key={`${curse.id}-${idx}`}
                 type="button"
                 onClick={() => (isCursed ? onClearCurses() : onCastCurse(curse))}
                 className={`w-full rounded-lg border p-2.5 text-left transition cursor-pointer ${
@@ -282,7 +353,7 @@ export function LeftHexTerminalColumn({
           className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#00FF9D]/45 bg-[#00FF9D]/10 px-3 py-2 font-mono text-[11px] font-bold text-[#00FF9D] hover:bg-[#00FF9D]/20 cursor-pointer"
         >
           <Sparkles className="h-3.5 w-3.5" />
-          <span>Load Built-In Sample OBDeleven/VCDS Log</span>
+          <span>ISO 15765-4 / SAE J1979 CAN Telemetry CSV</span>
         </button>
 
         <div className="grid grid-cols-3 gap-1.5">
