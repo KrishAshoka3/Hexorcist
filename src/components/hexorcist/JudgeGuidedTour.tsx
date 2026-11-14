@@ -46,7 +46,7 @@ export const JUDGE_TOUR_STEPS: JudgeTourStepMeta[] = [
     title: "Google Cloud Vertex AI Root-Cause & Repair Estimate",
     description:
       "Dispatched live CAN hex frame, VIN, and SAE J2012 bitmask to Gemini 2.5 Flash on Vertex AI to return root cause, OEM part specification, labor hours, and repair estimate.",
-    telemetryCallout: "OEM Spec #0B5-398-009-F • Est. Repair Quote: $1,640 (5.5 hrs)",
+    telemetryCallout: "OEM Spec #0B5-398-009-F • Est. Repair Quote: $1,480 (6.5 hrs)",
     targetPanel: "VERTEX_AUTOPSY",
   },
   {

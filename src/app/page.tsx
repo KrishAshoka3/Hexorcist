@@ -56,6 +56,12 @@ import {
 } from "@/components/hexorcist/JudgeGuidedTour";
 import { KiroArchitectureDrawer } from "@/components/hexorcist/KiroArchitectureDrawer";
 import {
+  CinemaSpotlightPanelId,
+  DemoVideoDirector,
+} from "@/components/DemoVideoDirector";
+import { StandardObdScannerModal } from "@/components/StandardObdScannerModal";
+import { MechanicSpecSheetModal } from "@/components/MechanicSpecSheetModal";
+import {
   playHexSound,
   setSoundMuted as persistSoundMuted,
 } from "@/lib/sound-fx";
@@ -130,6 +136,21 @@ export default function HexorcistDashboardPage() {
   const [activeWorkflowStep, setActiveWorkflowStep] = useState<1 | 2 | 3>(1);
   const [soundMuted, setSoundMutedState] = useState<boolean>(false);
   const [kiroDrawerOpen, setKiroDrawerOpen] = useState<boolean>(false);
+  const [kiroAutoRunTrigger, setKiroAutoRunTrigger] = useState<number>(0);
+  const [cinemaLauncherOpen, setCinemaLauncherOpen] = useState<boolean>(false);
+  const [cinemaRunning, setCinemaRunning] = useState<boolean>(false);
+  const [cinemaRecording, setCinemaRecording] = useState<boolean>(false);
+  const [cinemaSpotlightPanel, setCinemaSpotlightPanel] =
+    useState<CinemaSpotlightPanelId | null>(null);
+  const [cinemaSignalIndex, setCinemaSignalIndex] = useState<number | null>(null);
+  const [cinemaVinModalOpen, setCinemaVinModalOpen] = useState<boolean>(false);
+  const [cinemaTooltipPid, setCinemaTooltipPid] = useState<
+    "22F40A" | "0106" | "0142" | null
+  >(null);
+  const [obdScannerModalOpen, setObdScannerModalOpen] = useState<boolean>(false);
+  const [scannerSweepTrigger, setScannerSweepTrigger] = useState<number>(0);
+  const [mechanicSpecModalOpen, setMechanicSpecModalOpen] = useState<boolean>(false);
+  const [shopQuoteUsd, setShopQuoteUsd] = useState<number>(2450);
   const [guidedTourStep, setGuidedTourStep] = useState<JudgeTourStepNumber | null>(null);
   const [tourAutoPlaying, setTourAutoPlaying] = useState<boolean>(true);
   const [tourStepProgressPct, setTourStepProgressPct] = useState<number>(0);
@@ -721,7 +742,9 @@ export default function HexorcistDashboardPage() {
     }
   };
 
-  const handleRunAutopsy = async () => {
+  const handleRunAutopsy = async (
+    endpoint: "/api/autopsy" | "/api/diagnose" = "/api/autopsy"
+  ) => {
     playHexSound("AUTOPSY_SCAN");
     setAutopsyLoading(true);
     try {
@@ -730,7 +753,7 @@ export default function HexorcistDashboardPage() {
         frames[0]?.rawFrame ??
         buildCANResponseFrame(soul.primaryPid, telemetry[soul.primaryPid]);
 
-      const res = await fetch("/api/diagnose", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -848,6 +871,11 @@ export default function HexorcistDashboardPage() {
   };
 
   const handleStartGuidedTour = () => {
+    if (cinemaRunning) {
+      setCinemaRunning(false);
+      setCinemaSpotlightPanel(null);
+    }
+    setCinemaLauncherOpen(false);
     if (guidedTourStep !== null) {
       setGuidedTourStep(null);
       setTourStepProgressPct(0);
@@ -890,13 +918,181 @@ export default function HexorcistDashboardPage() {
     return () => clearInterval(timer);
   }, [guidedTourStep, tourAutoPlaying]);
 
-  const activeTourSpotlightPanel = useMemo(
-    () =>
-      guidedTourStep
-        ? JUDGE_TOUR_STEPS.find((s) => s.step === guidedTourStep)?.targetPanel ?? null
-        : null,
-    [guidedTourStep]
-  );
+  const activeTourSpotlightPanel = useMemo(() => {
+    if (cinemaRunning && cinemaSpotlightPanel) return cinemaSpotlightPanel;
+    return guidedTourStep
+      ? JUDGE_TOUR_STEPS.find((s) => s.step === guidedTourStep)?.targetPanel ?? null
+      : null;
+  }, [cinemaRunning, cinemaSpotlightPanel, guidedTourStep]);
+
+  const handleClearMode04Broadcast = useCallback(() => {
+    const tTx = nowTimeStr();
+    const tRx = nowTimeStr();
+    const rxId = makeUniqueEntryId("obd-rx");
+    const txId = makeUniqueEntryId("obd-tx");
+    setUdsLogs((prev) => [
+      {
+        id: rxId,
+        timestamp: tRx,
+        direction: "RX 7E8",
+        hex: "7E8 01 44",
+        description:
+          "SAE J1979 Mode $44 Positive Response — Active/Pending DTCs Cleared & MIL Turned OFF",
+        status: "OK",
+      },
+      {
+        id: txId,
+        timestamp: tTx,
+        direction: "TX 7E0",
+        hex: "7DF 01 04",
+        description:
+          "SAE J1979 Functional Broadcast Mode $04 Clear Codes & Reset Check Engine Light",
+        status: "OK",
+      },
+      ...prev,
+    ]);
+    playHexSound("EXORCISM_CHIME");
+    setActiveCurse(null);
+    setTelemetry({ ...soul.baselineTelemetry });
+    setDynoCurve(buildInitialDynoCurve(soul, 0));
+  }, [soul]);
+
+  const handleCinemaResetNominalFocused = useCallback(() => {
+    const dsg = VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
+    setGuidedTourStep(null);
+    setTourStepProgressPct(0);
+    setViewMode("FOCUSED");
+    setConnectionMode("VIRTUAL ECU 25Hz");
+    setCsvPlaying(false);
+    setStreamPaused(false);
+    setHardwareModalOpen(false);
+    setObdScannerModalOpen(false);
+    setMechanicSpecModalOpen(false);
+    setKiroDrawerOpen(false);
+    setCinemaSignalIndex(null);
+    setCinemaTooltipPid(null);
+    setCinemaVinModalOpen(false);
+    setShopQuoteUsd(2450);
+    setActiveVehicleId("GERMAN_V6_DSG");
+    setActiveVin(dsg.defaultVin);
+    setDecodedVinInfo(null);
+    setActiveCurse(null);
+    setCustomDtc("P0750");
+    setScopePid("22F40A");
+    setActiveTab("OSCILLOSCOPE");
+    setTelemetry({ ...dsg.baselineTelemetry });
+    setAutopsyResult(null);
+    setDynoCurve(buildInitialDynoCurve(dsg, 0));
+    setActiveWorkflowStep(1);
+  }, []);
+
+  const handleCinemaInjectP0750 = useCallback(() => {
+    const dsg = VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
+    const p0750 = dsg.curses[0];
+    playHexSound("FAULT_ALERT");
+    setActiveVehicleId("GERMAN_V6_DSG");
+    setActiveVin(dsg.defaultVin);
+    setActiveCurse(p0750);
+    setCustomDtc(p0750.dtcCode);
+    setScopePid("22F40A");
+    setActiveTab("OSCILLOSCOPE");
+    setTelemetry({
+      ...dsg.baselineTelemetry,
+      ...(p0750.telemetryOverrides as Partial<Record<PidKey, number>>),
+    });
+    setDynoCurve(buildInitialDynoCurve(dsg, p0750.powerLossPct));
+    setActiveWorkflowStep(2);
+  }, []);
+
+  const handleCinemaOpenLiveNhtsaVinModal = useCallback(async () => {
+    const sampleVin = "1FA6P8CF5L5109284";
+    const fallbackVin: DecodedNhtsaVin = {
+      vin: sampleVin,
+      make: "NA V8 POWERTRAIN",
+      model: "5.0L V8 Fastback",
+      modelYear: "2020",
+      bodyClass: "Coupe",
+      engineInfo: "5.0L 8-Cyl 460 HP",
+      fuelType: "Gasoline",
+      driveType: "RWD",
+      plantInfo: "US DOT NHTSA vPIC Calibrated",
+      displacementL: "5.0",
+      cylinders: "8",
+      horsepower: "460",
+    };
+    setActiveVin(sampleVin);
+    setDecodedVinInfo(fallbackVin);
+    setCinemaVinModalOpen(true);
+
+    try {
+      const res = await fetch(
+        `https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/${encodeURIComponent(
+          sampleVin
+        )}?format=json`
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const row = data?.Results?.[0];
+      if (!row) return;
+      setDecodedVinInfo({
+        vin: sampleVin,
+        make: row.Make || fallbackVin.make,
+        model: row.Model || fallbackVin.model,
+        modelYear: row.ModelYear || fallbackVin.modelYear,
+        bodyClass: row.BodyClass || fallbackVin.bodyClass,
+        engineInfo:
+          [
+            row.DisplacementL ? `${row.DisplacementL}L` : "",
+            row.EngineCylinders ? `${row.EngineCylinders}-Cyl` : "",
+            row.EngineHP ? `${row.EngineHP} HP` : "",
+          ]
+            .filter(Boolean)
+            .join(" ") || fallbackVin.engineInfo,
+        fuelType: row.FuelTypePrimary || fallbackVin.fuelType,
+        driveType: row.DriveType || fallbackVin.driveType,
+        plantInfo:
+          [row.PlantCity, row.PlantCountry].filter(Boolean).join(", ") ||
+          fallbackVin.plantInfo,
+        displacementL: row.DisplacementL || fallbackVin.displacementL,
+        cylinders: row.EngineCylinders || fallbackVin.cylinders,
+        horsepower: row.EngineHP || fallbackVin.horsepower,
+      });
+    } catch {
+      // Offline fallbackVin already populated cleanly
+    }
+  }, []);
+
+  const handleCinemaBindVinAndPrepareDyno = useCallback(() => {
+    const vinData: DecodedNhtsaVin =
+      decodedVinInfo && decodedVinInfo.vin === "1FA6P8CF5L5109284"
+        ? decodedVinInfo
+        : {
+            vin: "1FA6P8CF5L5109284",
+            make: "NA V8 POWERTRAIN",
+            model: "5.0L V8 Fastback",
+            modelYear: "2020",
+            bodyClass: "Coupe",
+            engineInfo: "5.0L 8-Cyl 460 HP",
+            fuelType: "Gasoline",
+            driveType: "RWD",
+            plantInfo: "US DOT NHTSA vPIC Calibrated",
+            displacementL: "5.0",
+            cylinders: "8",
+            horsepower: "460",
+          };
+    const boundSoul = buildCustomVinSoul(vinData);
+    setCinemaVinModalOpen(false);
+    setCustomVinSoul(boundSoul);
+    setActiveVehicleId("CUSTOM_VIN_SOUL");
+    setActiveVin(boundSoul.defaultVin);
+    setDecodedVinInfo(vinData);
+    setActiveCurse(null);
+    setScopePid(boundSoul.primaryPid);
+    setTelemetry({ ...boundSoul.baselineTelemetry });
+    setDynoCurve(buildInitialDynoCurve(boundSoul, 0));
+    setViewMode("FOCUSED");
+    setActiveTab("ROAD_DYNO");
+  }, [decodedVinInfo]);
 
   const peakActualWhp = useMemo(
     () => dynoCurve.reduce((max, p) => Math.max(max, p.actualWhp), 0),
@@ -924,9 +1120,23 @@ export default function HexorcistDashboardPage() {
         onBindCustomVinSoul={handleBindCustomVinSoul}
         onOpenHardwareStudio={(tab) => {
           playHexSound("CLICK");
+          setCinemaSignalIndex(null);
           setHardwareStudioTab(tab);
           setHardwareModalOpen(true);
         }}
+        onToggleCinemaLauncher={() => {
+          playHexSound("CLICK");
+          if (guidedTourStep !== null) {
+            setGuidedTourStep(null);
+            setTourStepProgressPct(0);
+          }
+          setCinemaLauncherOpen((open) => !open);
+        }}
+        cinemaLauncherOpen={cinemaLauncherOpen}
+        cinemaRunning={cinemaRunning}
+        cinemaRecording={cinemaRecording}
+        cinemaVinModalOpen={cinemaVinModalOpen}
+        onCloseCinemaVinModal={() => setCinemaVinModalOpen(false)}
         onStartGuidedTour={handleStartGuidedTour}
         guidedTourStep={guidedTourStep}
         onOpenKiroDrawer={() => {
@@ -948,6 +1158,11 @@ export default function HexorcistDashboardPage() {
           setDecodedVinInfo(decoded);
         }}
         hasActiveFault={Boolean(activeCurse)}
+        onOpenObdScannerModal={() => {
+          playHexSound("CLICK");
+          setObdScannerModalOpen(true);
+          setScannerSweepTrigger((c) => c + 1);
+        }}
       />
 
       <main className="mx-auto max-w-[1840px] px-4 py-4 space-y-4">
@@ -1097,6 +1312,12 @@ export default function HexorcistDashboardPage() {
               onRunDynoPull={handleRunDynoPull}
               udsLogs={udsLogs}
               onDispatchUdsCommand={handleDispatchUdsCommand}
+              activeVin={activeVin}
+              scannerSweepTrigger={scannerSweepTrigger}
+              onClearMode04Codes={handleClearMode04Broadcast}
+              onCastCurse={handleCastCurse}
+              onOpenMechanicSpecSheet={() => setMechanicSpecModalOpen(true)}
+              cinemaTooltipPid={cinemaTooltipPid}
             />
           </div>
 
@@ -1106,10 +1327,16 @@ export default function HexorcistDashboardPage() {
               activeWorkflowStep={activeWorkflowStep}
               tourSpotlightPanel={activeTourSpotlightPanel}
               activeDtc={activeCurse?.dtcCode ?? customDtc}
+              hasActiveFault={Boolean(activeCurse)}
+              activeCurse={activeCurse}
+              telemetry={telemetry}
+              shopQuoteUsd={shopQuoteUsd}
+              onChangeShopQuoteUsd={setShopQuoteUsd}
+              onOpenMechanicSpecSheet={() => setMechanicSpecModalOpen(true)}
               onChangeCustomDtc={setCustomDtc}
               autopsyLoading={autopsyLoading}
               autopsyResult={autopsyResult}
-              onRunAutopsy={handleRunAutopsy}
+              onRunAutopsy={() => void handleRunAutopsy("/api/autopsy")}
               onApplyRecommendedUds={() => {
                 setActiveTab("UDS_TERMINAL");
                 const rec = autopsyResult?.recommendedUdsCommand ?? "";
@@ -1168,6 +1395,7 @@ export default function HexorcistDashboardPage() {
 
       <KiroArchitectureDrawer
         open={kiroDrawerOpen}
+        autoRunTrigger={kiroAutoRunTrigger}
         onClose={() => {
           playHexSound("CLICK");
           setKiroDrawerOpen(false);
@@ -1178,7 +1406,10 @@ export default function HexorcistDashboardPage() {
         open={hardwareModalOpen}
         activeTab={hardwareStudioTab}
         onChangeTab={setHardwareStudioTab}
-        onClose={() => setHardwareModalOpen(false)}
+        onClose={() => {
+          setCinemaSignalIndex(null);
+          setHardwareModalOpen(false);
+        }}
         activeVehicleId={activeVehicleId}
         soul={soul}
         telemetry={telemetry}
@@ -1203,6 +1434,105 @@ export default function HexorcistDashboardPage() {
         onSendPhysicalSerialCommand={handleSendPhysicalSerialCommand}
         onIngestLoopbackFrame={ingestRawFrame}
         onClearFaultsFromTerminal={handleClearCurses}
+        cinemaSignalIndex={cinemaSignalIndex}
+      />
+
+      <StandardObdScannerModal
+        open={obdScannerModalOpen}
+        onClose={() => setObdScannerModalOpen(false)}
+        onDockInCenterWorkspace={() => setActiveTab("OBD_SCANNER")}
+        soul={soul}
+        vin={activeVin}
+        activeCurse={activeCurse}
+        telemetry={telemetry}
+        scanTriggerCount={scannerSweepTrigger}
+        onClearMode04Codes={handleClearMode04Broadcast}
+        onInjectFaultPreset={handleCastCurse}
+        onOpenMechanicSpecSheet={() => {
+          setObdScannerModalOpen(false);
+          setMechanicSpecModalOpen(true);
+        }}
+      />
+
+      <MechanicSpecSheetModal
+        open={mechanicSpecModalOpen}
+        onClose={() => setMechanicSpecModalOpen(false)}
+        soul={soul}
+        vin={activeVin}
+        activeCurse={activeCurse}
+        activeDtc={activeCurse?.dtcCode ?? customDtc}
+        telemetry={telemetry}
+        autopsyResult={autopsyResult}
+        escrowBalanceCents={escrowBalanceCents}
+        escrowRateCentsPerMile={escrowRateCentsPerMile}
+      />
+
+      <DemoVideoDirector
+        launcherOpen={cinemaLauncherOpen}
+        onCloseLauncher={() => setCinemaLauncherOpen(false)}
+        isRunning={cinemaRunning}
+        onRunningChange={setCinemaRunning}
+        isRecording={cinemaRecording}
+        onRecordingChange={setCinemaRecording}
+        activeDtcCode={activeCurse?.dtcCode ?? null}
+        escrowRateCentsPerMile={escrowRateCentsPerMile}
+        escrowBalanceCents={escrowBalanceCents}
+        peakActualWhp={peakActualWhp}
+        onResetNominalFocused={handleCinemaResetNominalFocused}
+        onSpotlightPanel={setCinemaSpotlightPanel}
+        onSetCinemaTooltipPid={setCinemaTooltipPid}
+        onInjectPrimaryFaultP0750={handleCinemaInjectP0750}
+        onOpenObdScannerTabAndSweep={() => {
+          setActiveTab("OBD_SCANNER");
+          setScannerSweepTrigger((c) => c + 1);
+        }}
+        onTriggerVertexAutopsy={() => void handleRunAutopsy("/api/autopsy")}
+        onSetShopQuoteUsd={setShopQuoteUsd}
+        onSimulateCommuteEscrow={handleSimulateCommuteDeposit}
+        onSetMechanicSpecModalOpen={setMechanicSpecModalOpen}
+        onClearObdMode04={handleClearMode04Broadcast}
+        onOpenUdsTerminalTab={() => setActiveTab("UDS_TERMINAL")}
+        onFireUdsExorcism31={() => handleDispatchUdsCommand("31")}
+        onOpenOscilloscopeTab={() => setActiveTab("OSCILLOSCOPE")}
+        onSwitchToEngineerProMode={() => setViewMode("PRO")}
+        onOpenDbcMatrixModal={(sigIdx) => {
+          setCinemaSignalIndex(sigIdx);
+          setHardwareStudioTab("DBC_INSPECTOR");
+          setHardwareModalOpen(true);
+        }}
+        onSwitchModalToCsvReplayAndLoad={() => {
+          setCinemaSignalIndex(null);
+          setHardwareStudioTab("CSV_REPLAY");
+          setHardwareModalOpen(true);
+          setCsvSpeed(2);
+          handleLoadBuiltInSampleCsv();
+        }}
+        onCloseHardwareModalAndResumeSim={() => {
+          setCinemaSignalIndex(null);
+          setHardwareModalOpen(false);
+          void handleDisconnectExternal();
+        }}
+        onOpenLiveNhtsaVinModal={() => {
+          void handleCinemaOpenLiveNhtsaVinModal();
+        }}
+        onBindNhtsaVinAndPrepareDyno={handleCinemaBindVinAndPrepareDyno}
+        onExecuteWotDynoPull={handleRunDynoPull}
+        onOpenKiroProofsDrawer={() => {
+          setKiroDrawerOpen(true);
+          setKiroAutoRunTrigger((n) => n + 1);
+        }}
+        onCloseAllOverlaysForFinale={() => {
+          setCinemaSignalIndex(null);
+          setCinemaTooltipPid(null);
+          setHardwareModalOpen(false);
+          setObdScannerModalOpen(false);
+          setMechanicSpecModalOpen(false);
+          setKiroDrawerOpen(false);
+          setCinemaVinModalOpen(false);
+          void handleDisconnectExternal();
+          setViewMode("FOCUSED");
+          setActiveTab("OSCILLOSCOPE");
+        }}
       />
     </div>
   );

@@ -6,7 +6,9 @@ import {
   ChevronDown,
   ChevronUp,
   Gauge,
+  HelpCircle,
   Play,
+  Search,
   TerminalSquare,
 } from "lucide-react";
 import {
@@ -25,8 +27,11 @@ import {
   UNIVERSAL_PID_REGISTRY,
   VehicleSoulPreset,
 } from "@/lib/obd-hex-engine";
+import { PLAIN_ENGLISH_PID_TOOLTIPS } from "@/lib/obd-scanner-qol";
+import { StandardObdScannerPanel } from "@/components/StandardObdScannerModal";
+import { playHexSound } from "@/lib/sound-fx";
 
-export type CenterTabId = "OSCILLOSCOPE" | "ROAD_DYNO" | "UDS_TERMINAL";
+export type CenterTabId = "OSCILLOSCOPE" | "OBD_SCANNER" | "ROAD_DYNO" | "UDS_TERMINAL";
 
 export interface ScopeSample {
   tick: string;
@@ -70,6 +75,12 @@ interface CenterDiagnosticColumnProps {
   onRunDynoPull: () => void;
   udsLogs: UdsHandshakeEntry[];
   onDispatchUdsCommand: (mode: "04" | "2F" | "31") => void;
+  activeVin: string;
+  scannerSweepTrigger?: number;
+  onClearMode04Codes: () => void;
+  onCastCurse?: (curse: MechanicalCursePreset) => void;
+  onOpenMechanicSpecSheet?: () => void;
+  cinemaTooltipPid?: PidKey | null;
 }
 
 const EIGHT_GAUGE_PIDS: PidKey[] = [
@@ -102,19 +113,34 @@ export function CenterDiagnosticColumn({
   onRunDynoPull,
   udsLogs,
   onDispatchUdsCommand,
+  activeVin,
+  scannerSweepTrigger = 0,
+  onClearMode04Codes,
+  onCastCurse,
+  onOpenMechanicSpecSheet,
+  cinemaTooltipPid = null,
 }: CenterDiagnosticColumnProps) {
   const [showAllChannelsInFocused, setShowAllChannelsInFocused] = useState(false);
+  const [pinnedTooltipPid, setPinnedTooltipPid] = useState<PidKey | null>(null);
+  const [hoveredTooltipPid, setHoveredTooltipPid] = useState<PidKey | null>(null);
   const scopeDef = UNIVERSAL_PID_REGISTRY[scopePid];
-  const showAllEight = viewMode === "PRO" || showAllChannelsInFocused;
+  const showAllEight =
+    viewMode === "PRO" || showAllChannelsInFocused || cinemaTooltipPid === "0106";
+  const activeTooltipPid: PidKey | null =
+    cinemaTooltipPid ?? hoveredTooltipPid ?? pinnedTooltipPid;
 
   const isTourTarget =
-    tourSpotlightPanel === "OSCILLOSCOPE" || tourSpotlightPanel === "UDS_EXORCISM";
+    tourSpotlightPanel === "OSCILLOSCOPE" ||
+    tourSpotlightPanel === "OBD_SCANNER" ||
+    tourSpotlightPanel === "UDS_EXORCISM" ||
+    tourSpotlightPanel === "ROAD_DYNO";
   const isDimmed = Boolean(tourSpotlightPanel && !isTourTarget);
   const isWorkflowUdsHighlight =
     !tourSpotlightPanel && viewMode === "FOCUSED" && activeWorkflowStep === 3 && activeTab === "UDS_TERMINAL";
 
   return (
     <section
+      data-cinema-target="CENTER_PANEL"
       className={`flex flex-col gap-4 transition-all duration-300 ${
         isTourTarget || isWorkflowUdsHighlight
           ? "rounded-2xl ring-2 ring-[#00FF9D]/70 shadow-[0_0_38px_rgba(0,255,157,0.28)] p-1"
@@ -122,46 +148,75 @@ export function CenterDiagnosticColumn({
       } ${isDimmed ? "opacity-45" : "opacity-100"}`}
     >
       {/* Mode Switcher Tabs */}
-      <div className="grid grid-cols-3 gap-2 rounded-xl border border-white/10 bg-[#0A0D14]/90 p-1.5">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 rounded-xl border border-white/10 bg-[#0A0D14]/90 p-1.5">
         <button
           type="button"
           onClick={() => onSelectTab("OSCILLOSCOPE")}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 font-mono text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 font-mono text-[11px] font-bold transition cursor-pointer ${
             activeTab === "OSCILLOSCOPE"
               ? "bg-[#00FF9D]/15 text-[#00FF9D] border border-[#00FF9D]/50"
               : "text-slate-400 hover:text-white"
           }`}
         >
-          <Activity className="h-4 w-4" />
-          <span>60fps OSCILLOSCOPE</span>
+          <Activity className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">60fps OSCILLOSCOPE</span>
+        </button>
+
+        <button
+          type="button"
+          data-cinema-target="CENTER_OBD_TAB_BTN"
+          onClick={() => onSelectTab("OBD_SCANNER")}
+          className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 font-mono text-[11px] font-bold transition cursor-pointer ${
+            activeTab === "OBD_SCANNER"
+              ? "bg-[#00E5FF]/20 text-[#00E5FF] border border-[#00E5FF]/65 shadow-[0_0_16px_rgba(0,229,255,0.22)]"
+              : activeCurse
+              ? "text-[#FF6B81] bg-[#FF1E42]/10 border border-[#FF1E42]/35 hover:bg-[#FF1E42]/20"
+              : "text-slate-300 hover:text-white"
+          }`}
+        >
+          <Search className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">🔍 OBD-II Code Scanner (ECM / TCM)</span>
         </button>
 
         <button
           type="button"
           onClick={() => onSelectTab("ROAD_DYNO")}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 font-mono text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 font-mono text-[11px] font-bold transition cursor-pointer ${
             activeTab === "ROAD_DYNO"
               ? "bg-[#00E5FF]/15 text-[#00E5FF] border border-[#00E5FF]/50"
               : "text-slate-400 hover:text-white"
           }`}
         >
-          <Gauge className="h-4 w-4" />
-          <span>VIRTUAL ROAD DYNO</span>
+          <Gauge className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">VIRTUAL ROAD DYNO</span>
         </button>
 
         <button
           type="button"
           onClick={() => onSelectTab("UDS_TERMINAL")}
-          className={`flex items-center justify-center gap-2 rounded-lg py-2.5 font-mono text-xs font-bold transition cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 font-mono text-[11px] font-bold transition cursor-pointer ${
             activeTab === "UDS_TERMINAL"
               ? "bg-[#FFB800]/15 text-[#FFB800] border border-[#FFB800]/50"
               : "text-slate-400 hover:text-white"
           }`}
         >
-          <TerminalSquare className="h-4 w-4" />
-          <span>UDS EXORCISM (04/2F/31)</span>
+          <TerminalSquare className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">UDS EXORCISM (04/2F/31)</span>
         </button>
       </div>
+
+      {activeTab === "OBD_SCANNER" && (
+        <StandardObdScannerPanel
+          soul={soul}
+          vin={activeVin}
+          activeCurse={activeCurse}
+          telemetry={telemetry}
+          scanTriggerCount={scannerSweepTrigger}
+          onClearMode04Codes={onClearMode04Codes}
+          onInjectFaultPreset={onCastCurse}
+          onOpenMechanicSpecSheet={onOpenMechanicSpecSheet}
+        />
+      )}
 
       {activeTab === "OSCILLOSCOPE" && (
         <div className="space-y-4">
@@ -245,12 +300,12 @@ export function CenterDiagnosticColumn({
           </div>
 
           {/* Progressive Disclosure KPI Cards */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between px-0.5 font-mono text-[11px]">
+          <div data-cinema-target="CENTER_KPI_GRID" className="space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-0.5 font-mono text-[11px]">
               <span className="text-slate-400">
                 {showAllEight
-                  ? "ALL 8 LIVE SAE J1979 / UDS TELEMETRY CHANNELS"
-                  : "4 CRITICAL TELEMETRY KPIs (FOCUSED VIEW)"}
+                  ? "ALL 8 LIVE SAE J1979 / UDS TELEMETRY CHANNELS (CLICK ? FOR PLAIN ENGLISH)"
+                  : "4 CRITICAL TELEMETRY KPIs • HOVER OR CLICK (?) FOR PLAIN-ENGLISH MEANING"}
               </span>
               {viewMode === "FOCUSED" && (
                 <button
@@ -266,12 +321,38 @@ export function CenterDiagnosticColumn({
                   ) : (
                     <>
                       <ChevronDown className="h-3 w-3" />
-                      <span>Show All 8 Telemetry Channels</span>
+                      <span>Show All 8 Telemetry Channels (incl. STFT %)</span>
                     </>
                   )}
                 </button>
               )}
             </div>
+
+            {activeTooltipPid && PLAIN_ENGLISH_PID_TOOLTIPS[activeTooltipPid] && (
+              <div className="rounded-xl border border-[#00FF9D]/55 bg-[#071611] px-3.5 py-2.5 font-mono text-xs shadow-[0_0_24px_rgba(0,255,157,0.18)] space-y-1">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-[#00FF9D]">
+                    💬 PLAIN-ENGLISH SENSOR GUIDE //{" "}
+                    {PLAIN_ENGLISH_PID_TOOLTIPS[activeTooltipPid].title} (0x{activeTooltipPid})
+                  </span>
+                  {pinnedTooltipPid && !cinemaTooltipPid && (
+                    <button
+                      type="button"
+                      onClick={() => setPinnedTooltipPid(null)}
+                      className="text-[10px] text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      Dismiss
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] leading-snug text-slate-100">
+                  {PLAIN_ENGLISH_PID_TOOLTIPS[activeTooltipPid].explanation}
+                </p>
+                <div className="text-[10px] text-[#00E5FF]">
+                  Healthy Spec: {PLAIN_ENGLISH_PID_TOOLTIPS[activeTooltipPid].healthyRange}
+                </div>
+              </div>
+            )}
 
             {showAllEight ? (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -280,22 +361,56 @@ export function CenterDiagnosticColumn({
                   const val = telemetry[pid] ?? 0;
                   const isWarn = val < def.warnLow || val > def.warnHigh;
                   const isFocused = scopePid === pid;
+                  const tip = PLAIN_ENGLISH_PID_TOOLTIPS[pid];
+                  const tipActive = activeTooltipPid === pid;
                   return (
-                    <button
+                    <div
                       key={`${pid}-${idx}`}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => onSelectScopePid(pid)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSelectScopePid(pid);
+                        }
+                      }}
                       className={`rounded-xl border p-3 text-left transition cursor-pointer ${
                         isWarn
                           ? "border-[#FF1E42]/70 bg-[#16070B]/90 crimson-glow"
+                          : tipActive
+                          ? "border-[#00FF9D] bg-[#091A14]/95 ring-1 ring-[#00FF9D]/60"
                           : isFocused
                           ? "border-[#00FF9D]/60 bg-[#0A1312]/90"
                           : "border-white/10 bg-[#0A0D14]/90 hover:border-white/25"
                       }`}
                     >
                       <div className="flex items-center justify-between font-mono text-[10px]">
-                        <span className="font-bold text-[#00E5FF]">{def.shortName}</span>
-                        <span className="text-slate-500">0x{def.key}</span>
+                        <span className="font-bold text-[#00E5FF]">
+                          {pid === "0106" ? "STFT %" : pid === "0142" ? "TERM 30 VOLT" : def.shortName}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-slate-500">0x{def.key}</span>
+                          <button
+                            type="button"
+                            aria-label={`Explain ${tip.title}`}
+                            title={`${tip.title} — ${tip.explanation}`}
+                            onMouseEnter={() => setHoveredTooltipPid(pid)}
+                            onMouseLeave={() => setHoveredTooltipPid(null)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              playHexSound("CLICK");
+                              setPinnedTooltipPid((prev) => (prev === pid ? null : pid));
+                            }}
+                            className={`inline-flex items-center justify-center rounded-full p-0.5 transition cursor-pointer ${
+                              tipActive
+                                ? "bg-[#00FF9D] text-[#06070A]"
+                                : "text-slate-400 hover:bg-white/10 hover:text-[#00FF9D]"
+                            }`}
+                          >
+                            <HelpCircle className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                       <div
                         className={`mt-1 font-mono text-xl font-bold ${
@@ -310,7 +425,7 @@ export function CenterDiagnosticColumn({
                       <div className="mt-1 truncate font-mono text-[10px] text-slate-500">
                         {def.name}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -329,24 +444,58 @@ export function CenterDiagnosticColumn({
                       : idx === 1
                       ? "SPEED"
                       : idx === 2
-                      ? `${def.shortName} ACTUAL vs TARGET`
-                      : "SYSTEM VOLTAGE";
+                      ? pid === "22F40A"
+                        ? "TARGET vs. ACTUAL PRESSURE"
+                        : `${def.shortName} TARGET vs ACTUAL`
+                      : "TERMINAL 30 VOLTAGE";
+                  const tip = PLAIN_ENGLISH_PID_TOOLTIPS[pid];
+                  const tipActive = activeTooltipPid === pid;
                   return (
-                    <button
+                    <div
                       key={`${pid}-${idx}`}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => onSelectScopePid(pid)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSelectScopePid(pid);
+                        }
+                      }}
                       className={`rounded-xl border p-3.5 text-left transition cursor-pointer ${
                         isWarn
                           ? "border-[#FF1E42]/75 bg-[#16070B]/90 crimson-glow"
+                          : tipActive
+                          ? "border-[#00FF9D] bg-[#091A14]/95 ring-1 ring-[#00FF9D]/60"
                           : scopePid === pid
                           ? "border-[#00FF9D]/60 bg-[#0A1312]/90"
                           : "border-white/10 bg-[#0A0D14]/90 hover:border-white/25"
                       }`}
                     >
-                      <div className="flex items-center justify-between font-mono text-[10px]">
+                      <div className="flex items-center justify-between gap-1 font-mono text-[10px]">
                         <span className="font-bold text-[#00E5FF] truncate pr-1">{title}</span>
-                        <span className="text-slate-500 shrink-0">0x{def.key}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-slate-500">0x{def.key}</span>
+                          <button
+                            type="button"
+                            aria-label={`Explain ${tip.title}`}
+                            title={`${tip.title} — ${tip.explanation}`}
+                            onMouseEnter={() => setHoveredTooltipPid(pid)}
+                            onMouseLeave={() => setHoveredTooltipPid(null)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              playHexSound("CLICK");
+                              setPinnedTooltipPid((prev) => (prev === pid ? null : pid));
+                            }}
+                            className={`inline-flex items-center justify-center rounded-full p-0.5 transition cursor-pointer ${
+                              tipActive
+                                ? "bg-[#00FF9D] text-[#06070A]"
+                                : "text-slate-400 hover:bg-white/10 hover:text-[#00FF9D]"
+                            }`}
+                          >
+                            <HelpCircle className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
                       <div
                         className={`mt-1 font-mono text-xl font-bold ${
@@ -361,7 +510,7 @@ export function CenterDiagnosticColumn({
                           ? `Target: ${targetVal.toFixed(def.decimals)} ${def.unit}`
                           : def.name}
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

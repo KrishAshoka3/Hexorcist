@@ -11,6 +11,16 @@ import {
   encodeDTCString,
   parseRawCANFrame,
 } from "./obd-hex-engine";
+import {
+  OBD_CONTROL_MODULES,
+  PLAIN_ENGLISH_PID_TOOLTIPS,
+  buildFreezeFrameSnapshot,
+  buildMultiModuleScanReport,
+  evaluateRoadSafetyTriage,
+  evaluateShopQuoteFairness,
+  formatMechanicSpecSheetPlainText,
+  lookupUniversalDtc,
+} from "./obd-scanner-qol";
 
 describe("HEXORCIST — Universal CAN-Bus Hex Engine & FinTech PBT Suite", () => {
   it("Property 1: Universal PID Round-Trip Serialization (decode(encode(x)) ≈ x across all 12 PIDs)", () => {
@@ -153,5 +163,132 @@ describe("HEXORCIST — Universal CAN-Bus Hex Engine & FinTech PBT Suite", () =>
     });
     expect(pull.whp).toBeGreaterThan(200);
     expect(pull.torqueLbFt).toBeGreaterThan(180);
+  });
+
+  it("Property 5: Universal SAE J2012 DTC Decoder & Multi-Module OBD-II Sweep Invariants", () => {
+    expect(OBD_CONTROL_MODULES.map((m) => m.rxCanId)).toEqual([
+      "0x7E8",
+      "0x7E9",
+      "0x7EA",
+      "0x7EB",
+    ]);
+
+    for (const sample of ["P0420", "P0750", "P0300", "P0171", "U0100", "C0035", "B1200"]) {
+      const entry = lookupUniversalDtc(sample);
+      expect(entry.valid).toBe(true);
+      expect(entry.code).toBe(sample);
+      expect(entry.plainEnglish.length).toBeGreaterThan(20);
+      expect(entry.symptoms.length).toBeGreaterThanOrEqual(2);
+    }
+
+    expect(evaluateRoadSafetyTriage("P0420")?.level).toBe("SAFE");
+    expect(evaluateRoadSafetyTriage("P0750")?.level).toBe("CAUTION");
+    expect(evaluateRoadSafetyTriage("P0300")?.level).toBe("STOP");
+    expect(evaluateRoadSafetyTriage("P0AA6")?.level).toBe("STOP");
+
+    const dsg = VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
+    const nominalReport = buildMultiModuleScanReport(dsg, null, dsg.baselineTelemetry);
+    expect(nominalReport.milOn).toBe(false);
+    expect(nominalReport.modules.every((m) => m.badgeText === "🟢 PASS (0 Faults)")).toBe(true);
+
+    const faultReport = buildMultiModuleScanReport(dsg, dsg.curses[0], {
+      ...dsg.baselineTelemetry,
+      ...(dsg.curses[0].telemetryOverrides as Record<string, number>),
+    });
+    expect(faultReport.milOn).toBe(true);
+    expect(
+      faultReport.modules.find((m) => m.module.id === "02_TCM")?.badgeText
+    ).toBe("🔴 FAULT DETECTED");
+    expect(faultReport.dtcCards.map((c) => c.modeHexLabel)).toEqual([
+      "Mode $03",
+      "Mode $07",
+      "Mode $0A",
+    ]);
+
+    const dtcArb = fc
+      .tuple(
+        fc.constantFrom("P", "C", "B", "U"),
+        fc.constantFrom("0", "1", "2", "3"),
+        fc.integer({ min: 0, max: 15 }),
+        fc.integer({ min: 0, max: 15 }),
+        fc.integer({ min: 0, max: 15 })
+      )
+      .map(
+        ([d, s, n1, n2, n3]) =>
+          `${d}${s}${n1.toString(16)}${n2.toString(16)}${n3.toString(16)}`.toUpperCase()
+      );
+
+    fc.assert(
+      fc.property(dtcArb, (code) => {
+        const decoded = lookupUniversalDtc(code);
+        expect(decoded.valid).toBe(true);
+        expect(decoded.code).toBe(code);
+        expect(decoded.bitmask.code).toBe(code);
+        expect(["SAFE", "CAUTION", "STOP"]).toContain(decoded.safetyTriage.level);
+      }),
+      { numRuns: 300 }
+    );
+  });
+
+  it("Property 6: Mechanic Quote Fair-Price Auditor Conservation & Monotonicity + QoL Coverage", () => {
+    const dealerAudit = evaluateShopQuoteFairness(1480, 6.5, 2450);
+    expect(dealerAudit.isOverpriced).toBe(true);
+    expect(dealerAudit.oemPartsUsd).toBe(420);
+    expect(dealerAudit.bookLaborHours).toBe(6.5);
+    expect(dealerAudit.bookHourlyRateUsd).toBe(163);
+    expect(dealerAudit.deltaUsd).toBe(970);
+    expect(dealerAudit.deltaPctAboveBook).toBe(65);
+    expect(dealerAudit.badgeText).toBe(
+      "🔴 OVERPRICED BY $970 (+65% Above OEM Book Rate)"
+    );
+
+    const fairAudit = evaluateShopQuoteFairness(1480, 6.5, 1480);
+    expect(fairAudit.isOverpriced).toBe(false);
+    expect(fairAudit.badgeText).toBe("🟢 FAIR MARKET PRICE");
+
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 250, max: 8000 }),
+        fc.double({ min: 1.0, max: 20.0, noNaN: true, noDefaultInfinity: true }),
+        fc.integer({ min: 200, max: 12000 }),
+        fc.integer({ min: 200, max: 12000 }),
+        (fairUsd, hrs, quoteA, quoteB) => {
+          const lowQuote = Math.min(quoteA, quoteB);
+          const highQuote = Math.max(quoteA, quoteB);
+          const lowRes = evaluateShopQuoteFairness(fairUsd, hrs, lowQuote);
+          const highRes = evaluateShopQuoteFairness(fairUsd, hrs, highQuote);
+
+          expect(lowRes.oemPartsUsd + lowRes.standardLaborUsd).toBe(lowRes.fairEstimateUsd);
+          expect(highRes.deltaUsd).toBeGreaterThanOrEqual(lowRes.deltaUsd);
+          expect(highRes.deltaPctAboveBook).toBeGreaterThanOrEqual(lowRes.deltaPctAboveBook);
+        }
+      ),
+      { numRuns: 300 }
+    );
+
+    for (const pid of ALL_PID_KEYS) {
+      expect(PLAIN_ENGLISH_PID_TOOLTIPS[pid].explanation.length).toBeGreaterThan(20);
+    }
+
+    const dsg = VEHICLE_SOUL_PRESETS.GERMAN_V6_DSG;
+    const ff = buildFreezeFrameSnapshot(dsg.baselineTelemetry, dsg, true);
+    const specText = formatMechanicSpecSheetPlainText({
+      soul: dsg,
+      vin: dsg.defaultVin,
+      activeDtc: "P0750",
+      hasActiveFault: true,
+      freezeFrame: ff,
+      rootCause: dsg.curses[0].mechanicalExplanation,
+      oemPartName: dsg.curses[0].oemPartName,
+      oemPartNumber: dsg.curses[0].oemPartNumber,
+      fairEstimateUsd: 1480,
+      laborHours: 6.5,
+      recommendedUdsCommand: dsg.curses[0].recommendedUdsCommand,
+      escrowBalanceCents: 55500,
+      escrowRateCentsPerMile: 290,
+      safetyTriage: evaluateRoadSafetyTriage("P0750"),
+    });
+    expect(specText).toContain("0B5-398-009-F");
+    expect(specText).toContain("HEX-PASS-");
   });
 });

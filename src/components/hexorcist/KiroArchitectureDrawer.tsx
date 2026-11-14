@@ -29,6 +29,7 @@ import { playHexSound } from "@/lib/sound-fx";
 interface KiroArchitectureDrawerProps {
   open: boolean;
   onClose: () => void;
+  autoRunTrigger?: number;
 }
 
 interface LiveAuditSummary {
@@ -40,11 +41,14 @@ interface LiveAuditSummary {
   sampleFrames: string[];
 }
 
-export function KiroArchitectureDrawer({ open, onClose }: KiroArchitectureDrawerProps) {
+export function KiroArchitectureDrawer({
+  open,
+  onClose,
+  autoRunTrigger,
+}: KiroArchitectureDrawerProps) {
   const [liveAudit, setLiveAudit] = useState<LiveAuditSummary | null>(null);
 
-  const handleRunBrowserAudit = () => {
-    playHexSound("AUTOPSY_SCAN");
+  const runLiveAuditCompute = (): LiveAuditSummary => {
     let pidPassed = 0;
     let dtcPassed = 0;
     let escrowPassed = 0;
@@ -85,15 +89,33 @@ export function KiroArchitectureDrawer({ open, onClose }: KiroArchitectureDrawer
       prevRate = currRate;
     }
 
-    setLiveAudit({
+    return {
       ranAt: new Date().toTimeString().slice(0, 8),
       samplesVerified: pidPassed + dtcPassed + escrowPassed,
       pidRoundTripsPassed: pidPassed,
       dtcBijectionsPassed: dtcPassed,
       escrowMonotonicPassed: escrowPassed,
       sampleFrames,
-    });
+    };
   };
+
+  const handleRunBrowserAudit = () => {
+    playHexSound("AUTOPSY_SCAN");
+    setLiveAudit(runLiveAuditCompute());
+  };
+
+  const autoAuditSummary = React.useMemo<LiveAuditSummary | null>(() => {
+    if (!open || !autoRunTrigger || autoRunTrigger <= 0) return null;
+    return runLiveAuditCompute();
+  }, [open, autoRunTrigger]);
+
+  React.useEffect(() => {
+    if (open && autoRunTrigger && autoRunTrigger > 0) {
+      playHexSound("AUTOPSY_SCAN");
+    }
+  }, [open, autoRunTrigger]);
+
+  const displayedAudit = liveAudit ?? autoAuditSummary;
 
   return (
     <AnimatePresence>
@@ -132,7 +154,10 @@ export function KiroArchitectureDrawer({ open, onClose }: KiroArchitectureDrawer
               </button>
             </div>
 
-            <div className="rounded-xl border border-[#00FF9D]/40 bg-[#0A1118] p-4 space-y-3 phosphor-glow">
+            <div
+              data-cinema-target="KIRO_PBT_CARD"
+              className="rounded-xl border border-[#00FF9D]/40 bg-[#0A1118] p-4 space-y-3 phosphor-glow"
+            >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <div className="text-xs font-bold text-[#00FF9D]">
@@ -194,21 +219,21 @@ export function KiroArchitectureDrawer({ open, onClose }: KiroArchitectureDrawer
                 </div>
               </div>
 
-              {liveAudit && (
+              {displayedAudit && (
                 <div className="rounded-lg border border-[#00FF9D]/40 bg-[#040609] p-3 text-[11px] space-y-1.5">
                   <div className="flex items-center justify-between text-[#00FF9D] font-bold">
                     <span>
-                      LIVE BROWSER INVARIANT CHECK PASSED ({liveAudit.samplesVerified}/240 SAMPLES)
+                      LIVE BROWSER INVARIANT CHECK PASSED ({displayedAudit.samplesVerified}/240 SAMPLES)
                     </span>
-                    <span className="text-[10px] text-slate-400">{liveAudit.ranAt}</span>
+                    <span className="text-[10px] text-slate-400">{displayedAudit.ranAt}</span>
                   </div>
                   <div className="text-[10px] text-slate-300">
-                    PID Frames: {liveAudit.pidRoundTripsPassed}/120 • J2012 Bitmasks:{" "}
-                    {liveAudit.dtcBijectionsPassed}/80 • Escrow Curve:{" "}
-                    {liveAudit.escrowMonotonicPassed}/40
+                    PID Frames: {displayedAudit.pidRoundTripsPassed}/120 • J2012 Bitmasks:{" "}
+                    {displayedAudit.dtcBijectionsPassed}/80 • Escrow Curve:{" "}
+                    {displayedAudit.escrowMonotonicPassed}/40
                   </div>
                   <div className="grid grid-cols-1 gap-1 pt-1 text-[10px] text-[#00E5FF]">
-                    {liveAudit.sampleFrames.map((line, idx) => (
+                    {displayedAudit.sampleFrames.map((line, idx) => (
                       <div key={`${line}-${idx}`} className="truncate rounded bg-white/[0.03] px-2 py-1">
                         {line}
                       </div>

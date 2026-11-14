@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Binary,
   Cable,
+  Clapperboard,
   Cpu,
   FileSpreadsheet,
   Layers,
@@ -53,6 +54,12 @@ interface TopCommandBarProps {
   customVinSoul: VehicleSoulPreset | null;
   onBindCustomVinSoul: (decoded: DecodedNhtsaVin) => void;
   onOpenHardwareStudio: (tab: HardwareStudioTab) => void;
+  onToggleCinemaLauncher: () => void;
+  cinemaLauncherOpen: boolean;
+  cinemaRunning: boolean;
+  cinemaRecording: boolean;
+  cinemaVinModalOpen?: boolean;
+  onCloseCinemaVinModal?: () => void;
   onStartGuidedTour: () => void;
   guidedTourStep: number | null;
   onOpenKiroDrawer: () => void;
@@ -65,6 +72,7 @@ interface TopCommandBarProps {
   decodedVinInfo: DecodedNhtsaVin | null;
   onApplyVin: (vin: string, decoded: DecodedNhtsaVin | null) => void;
   hasActiveFault: boolean;
+  onOpenObdScannerModal: () => void;
 }
 
 export function TopCommandBar({
@@ -75,6 +83,12 @@ export function TopCommandBar({
   customVinSoul,
   onBindCustomVinSoul,
   onOpenHardwareStudio,
+  onToggleCinemaLauncher,
+  cinemaLauncherOpen,
+  cinemaRunning,
+  cinemaRecording,
+  cinemaVinModalOpen,
+  onCloseCinemaVinModal,
   onStartGuidedTour,
   guidedTourStep,
   onOpenKiroDrawer,
@@ -87,6 +101,7 @@ export function TopCommandBar({
   decodedVinInfo,
   onApplyVin,
   hasActiveFault,
+  onOpenObdScannerModal,
 }: TopCommandBarProps) {
   const [vinModalOpen, setVinModalOpen] = useState(false);
   const [vinInput, setVinInput] = useState(activeVin);
@@ -100,6 +115,15 @@ export function TopCommandBar({
     setVinError(null);
     setVinModalOpen(true);
   };
+
+  const closeModal = () => {
+    setVinModalOpen(false);
+    onCloseCinemaVinModal?.();
+  };
+
+  const isVinModalOpen = vinModalOpen || Boolean(cinemaVinModalOpen);
+  const displayedDecoded = cinemaVinModalOpen ? decodedVinInfo : modalDecoded;
+  const displayedVinInput = cinemaVinModalOpen ? activeVin : vinInput;
 
   const handleDecodeVin = async (targetVin?: string) => {
     const cleanVin = (targetVin ?? vinInput).trim().toUpperCase();
@@ -250,7 +274,10 @@ export function TopCommandBar({
               </div>
 
               {/* Focused Mode vs. Engineer Pro Mode Segmented Control */}
-              <div className="flex items-center rounded-lg border border-white/15 bg-[#0A0D14] p-0.5 font-mono text-[11px]">
+              <div
+                data-cinema-target="TOP_MODE_TOGGLE"
+                className="flex items-center rounded-lg border border-white/15 bg-[#0A0D14] p-0.5 font-mono text-[11px]"
+              >
                 <button
                   type="button"
                   onClick={() => onChangeViewMode("FOCUSED")}
@@ -275,6 +302,47 @@ export function TopCommandBar({
                   <span>Engineer Pro Mode</span>
                 </button>
               </div>
+
+              {/* Prominent Standard OBD-II Multi-Module Code Scanner Button */}
+              <button
+                type="button"
+                data-cinema-target="TOP_OBD_SCANNER_BTN"
+                onClick={onOpenObdScannerModal}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-mono text-xs font-bold transition cursor-pointer ${
+                  hasActiveFault
+                    ? "border-[#FF1E42]/80 bg-[#FF1E42]/18 text-[#FF6B81] shadow-[0_0_20px_rgba(255,30,66,0.3)] hover:bg-[#FF1E42]/28"
+                    : "border-[#00E5FF]/70 bg-[#00E5FF]/14 text-[#00E5FF] shadow-[0_0_16px_rgba(0,229,255,0.2)] hover:bg-[#00E5FF]/24"
+                }`}
+              >
+                <span>🔍 OBD-II Code Scanner (ECM / TCM)</span>
+                {hasActiveFault && (
+                  <span className="rounded bg-[#FF1E42] px-1.5 py-0.5 text-[9px] font-black text-white">
+                    MIL ON
+                  </span>
+                )}
+              </button>
+
+              {/* Prominent 2-Min Visual Cinema Pitch Director Launcher */}
+              <button
+                type="button"
+                onClick={onToggleCinemaLauncher}
+                className={`flex items-center gap-1.5 rounded-lg border px-3.5 py-1.5 font-mono text-xs font-bold transition cursor-pointer ${
+                  cinemaRecording
+                    ? "border-[#FF1E42] bg-[#FF1E42] text-white shadow-[0_0_24px_rgba(255,30,66,0.55)] animate-pulse"
+                    : cinemaRunning || cinemaLauncherOpen
+                    ? "border-[#00FF9D] bg-[#00FF9D] text-[#06070A] shadow-[0_0_24px_rgba(0,255,157,0.42)]"
+                    : "border-[#00FF9D]/80 bg-gradient-to-r from-[#00FF9D]/20 via-[#00E5FF]/20 to-[#00FF9D]/20 text-[#00FF9D] shadow-[0_0_18px_rgba(0,255,157,0.22)] hover:border-[#00FF9D] hover:bg-[#00FF9D]/25"
+                }`}
+              >
+                <Clapperboard className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  {cinemaRecording
+                    ? "🔴 Recording 2-Min Cinema (.webm)"
+                    : cinemaRunning
+                    ? "🎬 Cinema Pitch Running"
+                    : "🎬 Launch 2-Min Cinema Pitch"}
+                </span>
+              </button>
 
               {/* 30-Second Judge Auto-Pilot Tour Trigger */}
               <button
@@ -413,7 +481,7 @@ export function TopCommandBar({
         </div>
       </header>
       <AnimatePresence>
-        {vinModalOpen && (
+        {isVinModalOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -421,6 +489,7 @@ export function TopCommandBar({
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
           >
             <motion.div
+              data-cinema-target="VIN_MODAL_CARD"
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -433,7 +502,7 @@ export function TopCommandBar({
                 </div>
                 <button
                   type="button"
-                  onClick={() => setVinModalOpen(false)}
+                  onClick={closeModal}
                   className="rounded p-1 text-slate-400 hover:bg-white/10 hover:text-white cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -445,7 +514,7 @@ export function TopCommandBar({
                   <input
                     type="text"
                     maxLength={17}
-                    value={vinInput}
+                    value={displayedVinInput}
                     onChange={(e) => setVinInput(e.target.value.toUpperCase())}
                     placeholder="Enter 17-character VIN (e.g. WAUDGAFL5EA049218)"
                     className="flex-1 rounded-lg border border-white/15 bg-[#050608] px-3 py-2 font-mono text-sm uppercase text-white outline-none focus:border-[#00E5FF]"
@@ -487,35 +556,35 @@ export function TopCommandBar({
                   </div>
                 )}
 
-                {modalDecoded && (
+                {displayedDecoded && (
                   <div className="rounded-lg border border-[#00FF9D]/30 bg-[#05070B] p-3.5 font-mono text-xs space-y-3">
                     <div className="flex items-center justify-between text-[#00FF9D]">
                       <span className="flex items-center gap-1.5 font-bold">
                         <CheckCircle2 className="h-4 w-4" />
-                        {modalDecoded.modelYear} {modalDecoded.make} {modalDecoded.model}
+                        {displayedDecoded.modelYear} {displayedDecoded.make} {displayedDecoded.model}
                       </span>
-                      <span className="text-[10px] text-slate-400">{modalDecoded.vin}</span>
+                      <span className="text-[10px] text-slate-400">{displayedDecoded.vin}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300">
                       <div>
-                        <span className="text-slate-500">BODY:</span> {modalDecoded.bodyClass}
+                        <span className="text-slate-500">BODY:</span> {displayedDecoded.bodyClass}
                       </div>
                       <div>
-                        <span className="text-slate-500">ENGINE:</span> {modalDecoded.engineInfo}
+                        <span className="text-slate-500">ENGINE:</span> {displayedDecoded.engineInfo}
                       </div>
                       <div>
-                        <span className="text-slate-500">FUEL:</span> {modalDecoded.fuelType}
+                        <span className="text-slate-500">FUEL:</span> {displayedDecoded.fuelType}
                       </div>
                       <div>
-                        <span className="text-slate-500">PLANT:</span> {modalDecoded.plantInfo}
+                        <span className="text-slate-500">PLANT:</span> {displayedDecoded.plantInfo}
                       </div>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => {
-                        onBindCustomVinSoul(modalDecoded);
-                        setVinModalOpen(false);
+                        onBindCustomVinSoul(displayedDecoded);
+                        closeModal();
                       }}
                       className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#00FF9D] px-4 py-2.5 font-mono text-xs font-bold text-[#06070A] shadow-[0_0_20px_rgba(0,255,157,0.3)] hover:bg-[#00FF9D]/90 cursor-pointer"
                     >

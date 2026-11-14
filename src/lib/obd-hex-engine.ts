@@ -705,8 +705,8 @@ export const VEHICLE_SOUL_PRESETS: Record<VehicleArchitectureId, VehicleSoulPres
         targetPid: "22F40A",
         oemPartName: "DL501 0B5 Mechatronic Solenoid & Pressure Transducer Repair Kit",
         oemPartNumber: "0B5-398-009-F",
-        estimatedCostUsd: 1640,
-        laborHours: 5.5,
+        estimatedCostUsd: 1480,
+        laborHours: 6.5,
         recommendedUdsCommand: "31 01 F4 0A (Bidirectional Solenoid & Kiss-Point Adaptation)",
         mechanicalExplanation:
           "Printed circuit laminate delamination inside the 0B5 wet-clutch mechatronic unit starves N435/N439 shift pressure control valves, drifting line pressure from 8.45 Bar down to 2.35 Bar and spiking dual-clutch fluid temperature via micro-slip.",

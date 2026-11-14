@@ -241,6 +241,7 @@ interface HardwareAndDbcModalProps {
   onSendPhysicalSerialCommand: (cmd: string) => Promise<boolean>;
   onIngestLoopbackFrame: (rawFrame: string) => void;
   onClearFaultsFromTerminal: () => void;
+  cinemaSignalIndex?: number | null;
 }
 
 const nowTerminalClock = (): string => {
@@ -278,6 +279,7 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
     onSendPhysicalSerialCommand,
     onIngestLoopbackFrame,
     onClearFaultsFromTerminal,
+    cinemaSignalIndex,
   } = props;
 
   const [dragOver, setDragOver] = useState(false);
@@ -302,11 +304,17 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
   }, [liveSyncBytes, manualBytes, selectedMatrixId, telemetry, activeDtc]);
 
   const activeSignal: DbcSignalDefinition = useMemo(() => {
+    if (cinemaSignalIndex !== undefined && cinemaSignalIndex !== null) {
+      const safeIdx =
+        ((cinemaSignalIndex % activeMatrix.signals.length) + activeMatrix.signals.length) %
+        activeMatrix.signals.length;
+      return activeMatrix.signals[safeIdx] ?? activeMatrix.signals[0];
+    }
     return (
       activeMatrix.signals.find((s) => s.name === hoveredSignalName) ??
       activeMatrix.signals[0]
     );
-  }, [activeMatrix, hoveredSignalName]);
+  }, [activeMatrix, hoveredSignalName, cinemaSignalIndex]);
 
   const activeSignalDecoded = useMemo(
     () => decodeDbcSignalEngineering(payloadBytes, activeSignal),
@@ -630,17 +638,19 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
                   </div>
 
                   {csvFrames.length > 0 ? (
-                    <CsvPlaybackScrubberBar
-                      frames={csvFrames}
-                      cursor={csvCursor}
-                      playing={csvPlaying}
-                      speed={csvSpeed}
-                      sourceLabel={csvSourceLabel}
-                      primaryPid={soul.primaryPid}
-                      onSeek={onSeekCsv}
-                      onTogglePlay={onTogglePlayCsv}
-                      onChangeSpeed={onChangeSpeedCsv}
-                    />
+                    <div data-cinema-target="MODAL_CSV_SCRUBBER">
+                      <CsvPlaybackScrubberBar
+                        frames={csvFrames}
+                        cursor={csvCursor}
+                        playing={csvPlaying}
+                        speed={csvSpeed}
+                        sourceLabel={csvSourceLabel}
+                        primaryPid={soul.primaryPid}
+                        onSeek={onSeekCsv}
+                        onTogglePlay={onTogglePlayCsv}
+                        onChangeSpeed={onChangeSpeedCsv}
+                      />
+                    </div>
                   ) : (
                     <div className="rounded-lg border border-white/10 bg-[#05070B] p-4 text-center text-xs text-slate-400">
                       No CSV log loaded yet — click{" "}
@@ -756,7 +766,10 @@ export function HardwareAndDbcModal(props: HardwareAndDbcModalProps) {
 
                     {/* Right: Interactive 8x8 (64-Bit) Bit-Map Grid & Live Engineering Math */}
                     <div className="lg:col-span-7 space-y-3.5">
-                      <div className="rounded-xl border border-[#00E5FF]/35 bg-[#05070B] p-4 space-y-3">
+                      <div
+                        data-cinema-target="MODAL_DBC_MATRIX"
+                        className="rounded-xl border border-[#00E5FF]/35 bg-[#05070B] p-4 space-y-3"
+                      >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="text-xs font-bold uppercase tracking-wider text-[#00E5FF]">
                             64-Bit CAN Payload Bit-Map (Bytes 0–7 • Click Any Bit to Flip)

@@ -7,14 +7,25 @@ import {
   Binary,
   BrainCircuit,
   Car,
+  FileText,
   Loader2,
   Lock,
+  ShieldCheck,
   Sparkles,
   Unlock,
   X,
 } from "lucide-react";
-import { inspectDTCBitmask } from "@/lib/obd-hex-engine";
+import {
+  MechanicalCursePreset,
+  PidKey,
+  inspectDTCBitmask,
+} from "@/lib/obd-hex-engine";
+import {
+  evaluateRoadSafetyTriage,
+  evaluateShopQuoteFairness,
+} from "@/lib/obd-scanner-qol";
 import type { DiagnoseResponsePayload } from "@/app/api/diagnose/route";
+import { playHexSound } from "@/lib/sound-fx";
 
 export interface EscrowLedgerEntry {
   id: string;
@@ -33,6 +44,12 @@ interface RightNecromancerVaultColumnProps {
   activeWorkflowStep?: 1 | 2 | 3;
   tourSpotlightPanel?: string | null;
   activeDtc: string;
+  hasActiveFault?: boolean;
+  activeCurse?: MechanicalCursePreset | null;
+  telemetry?: Partial<Record<PidKey, number>>;
+  shopQuoteUsd?: number;
+  onChangeShopQuoteUsd?: (usd: number) => void;
+  onOpenMechanicSpecSheet?: () => void;
   onChangeCustomDtc: (code: string) => void;
   autopsyLoading: boolean;
   autopsyResult: DiagnoseResponsePayload | null;
@@ -51,6 +68,12 @@ export function RightNecromancerVaultColumn({
   activeWorkflowStep,
   tourSpotlightPanel,
   activeDtc,
+  hasActiveFault = false,
+  activeCurse = null,
+  telemetry,
+  shopQuoteUsd: controlledShopQuoteUsd,
+  onChangeShopQuoteUsd,
+  onOpenMechanicSpecSheet,
   onChangeCustomDtc,
   autopsyLoading,
   autopsyResult,
@@ -66,6 +89,27 @@ export function RightNecromancerVaultColumn({
   const [releaseModalOpen, setReleaseModalOpen] = useState(false);
   const [shopName, setShopName] = useState("Certified Autonomous Drivetrain Lab LLC");
   const [releaseUsdInput, setReleaseUsdInput] = useState("");
+  const [localShopQuoteUsd, setLocalShopQuoteUsd] = useState<number>(2450);
+
+  const effectiveShopQuoteUsd = controlledShopQuoteUsd ?? localShopQuoteUsd;
+  const updateShopQuote = (nextUsd: number) => {
+    const bounded = Math.max(0, Math.min(12000, Math.round(nextUsd || 0)));
+    setLocalShopQuoteUsd(bounded);
+    onChangeShopQuoteUsd?.(bounded);
+  };
+
+  const baselineFairUsd =
+    autopsyResult?.estimatedCostUsd ?? activeCurse?.estimatedCostUsd ?? 1480;
+  const baselineLaborHrs =
+    autopsyResult?.laborHours ?? activeCurse?.laborHours ?? 6.5;
+  const quoteAudit = evaluateShopQuoteFairness(
+    baselineFairUsd,
+    baselineLaborHrs,
+    effectiveShopQuoteUsd
+  );
+  const safetyTriage = hasActiveFault
+    ? evaluateRoadSafetyTriage(activeDtc, activeCurse, telemetry)
+    : null;
 
   let bitmask = inspectDTCBitmask("P0750");
   try {
@@ -88,6 +132,7 @@ export function RightNecromancerVaultColumn({
     <aside className="flex flex-col gap-4">
       {/* SAE J2012 Bitmask Inspector & Vertex AI Necromancer */}
       <div
+        data-cinema-target="RIGHT_NECROMANCER"
         className={`rounded-xl border bg-[#0A0D14]/90 p-3.5 space-y-3 transition-all duration-300 ${
           autopsyHighlighted
             ? "border-[#00E5FF] ring-2 ring-[#00E5FF]/60 shadow-[0_0_32px_rgba(0,229,255,0.28)]"
@@ -106,8 +151,27 @@ export function RightNecromancerVaultColumn({
           </span>
         </div>
 
-        {/* SAE J2012 16-Bit Bitmask Inspector (Unfolded in Engineer Pro Mode) */}
-        {viewMode === "PRO" ? (
+        {/* 🚦 "Can I Drive With This?" Road Safety Triage Banner */}
+        {safetyTriage && (
+          <div
+            className={`rounded-lg border p-2.5 font-mono text-[11px] space-y-1 ${
+              safetyTriage.level === "STOP"
+                ? "border-[#FF1E42] bg-[#1E060B] text-[#FF6B81]"
+                : safetyTriage.level === "CAUTION"
+                ? "border-[#FFB800]/80 bg-[#1B1304] text-[#FFD166]"
+                : "border-[#00FF9D]/65 bg-[#061811] text-[#00FF9D]"
+            }`}
+          >
+            <div className="text-[9px] font-bold uppercase tracking-wider text-white/80">
+              🚦 CAN I DRIVE WITH THIS?
+            </div>
+            <div className="font-black leading-snug">{safetyTriage.badgeText}</div>
+            <div className="text-[10px] leading-snug text-slate-200">{safetyTriage.guidance}</div>
+          </div>
+        )}
+
+        {/* SAE J2012 16-Bit Bitmask Inspector (Unfolded in Engineer Pro Mode or Autopsy Spotlight) */}
+        {viewMode === "PRO" || autopsyHighlighted ? (
           <div className="rounded-lg border border-white/10 bg-[#05070B] p-2.5 font-mono text-[11px] space-y-2">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-[10px] text-slate-400">
@@ -207,8 +271,114 @@ export function RightNecromancerVaultColumn({
             </button>
           </motion.div>
         )}
+
+        {/* 🛡️ "Mechanic Quote Fair-Price Checker" (Overcharge Detector) */}
+        <div
+          data-cinema-target="RIGHT_QUOTE_CHECKER"
+          className="rounded-lg border border-white/12 bg-[#05080D] p-3 font-mono text-xs space-y-2.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-[11px] font-bold text-[#00E5FF]">
+              <ShieldCheck className="h-3.5 w-3.5 text-[#00FF9D]" />
+              <span>🛡️ Mechanic Quote Fair-Price Checker</span>
+            </span>
+            <span className="text-[10px] text-slate-400">
+              Fair Est: <strong className="text-[#00FF9D]">${quoteAudit.fairEstimateUsd.toLocaleString()}</strong>
+            </span>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] text-slate-300">
+              <label htmlFor="shop-quote-input">Compare Shop / Dealer Quote ($ USD):</label>
+              <div className="flex items-center gap-1">
+                <span className="text-slate-400">$</span>
+                <input
+                  id="shop-quote-input"
+                  type="number"
+                  min={200}
+                  max={10000}
+                  step={10}
+                  value={effectiveShopQuoteUsd}
+                  onChange={(e) => updateShopQuote(Number(e.target.value))}
+                  className="w-20 rounded border border-white/15 bg-black px-2 py-0.5 text-right font-mono text-xs font-bold text-white outline-none focus:border-[#00E5FF]"
+                />
+              </div>
+            </div>
+
+            <input
+              type="range"
+              min={500}
+              max={4500}
+              step={10}
+              value={Math.min(4500, Math.max(500, effectiveShopQuoteUsd))}
+              onChange={(e) => updateShopQuote(Number(e.target.value))}
+              aria-label="Compare Shop Quote Slider"
+              className="w-full accent-[#00E5FF] cursor-pointer"
+            />
+
+            <div className="flex flex-wrap gap-1 text-[9px]">
+              {[
+                { label: `Fair Book ($${quoteAudit.fairEstimateUsd})`, val: quoteAudit.fairEstimateUsd },
+                { label: "Indy ($1,550)", val: 1550 },
+                { label: "Dealer Quote ($2,450)", val: 2450 },
+              ].map((preset, idx) => (
+                <button
+                  key={`${preset.label}-${idx}`}
+                  type="button"
+                  onClick={() => {
+                    playHexSound("CLICK");
+                    updateShopQuote(preset.val);
+                  }}
+                  className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-slate-300 hover:border-[#00E5FF]/50 hover:text-[#00E5FF] cursor-pointer"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            className={`rounded-lg border px-2.5 py-2 text-[11px] font-black leading-snug ${
+              quoteAudit.isOverpriced
+                ? "border-[#FF1E42]/65 bg-[#FF1E42]/15 text-[#FF6B81]"
+                : "border-[#00FF9D]/55 bg-[#00FF9D]/12 text-[#00FF9D]"
+            }`}
+          >
+            {quoteAudit.badgeText}
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
+              <div className="text-slate-400">OEM PARTS</div>
+              <div className="font-bold text-white">${quoteAudit.oemPartsUsd.toLocaleString()}</div>
+            </div>
+            <div className="rounded border border-white/10 bg-white/[0.03] p-1.5">
+              <div className="text-slate-400">STANDARD LABOR</div>
+              <div className="font-bold text-white">
+                {quoteAudit.bookLaborHours} hrs @ ${quoteAudit.bookHourlyRateUsd}/hr
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 📄 Generate Printable Mechanic Spec Sheet & Escrow Pass */}
+        {onOpenMechanicSpecSheet && (
+          <button
+            type="button"
+            data-cinema-target="OPEN_SPEC_SHEET_BTN"
+            onClick={() => {
+              playHexSound("CLICK");
+              onOpenMechanicSpecSheet();
+            }}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#00FF9D]/55 bg-[#00FF9D]/12 px-3 py-2 font-mono text-[11px] font-bold text-[#00FF9D] hover:bg-[#00FF9D]/22 cursor-pointer"
+          >
+            <FileText className="h-3.5 w-3.5 shrink-0" />
+            <span>📄 Printable Mechanic Spec Sheet &amp; Escrow Pass</span>
+          </button>
+        )}
       </div>
       <div
+        data-cinema-target="RIGHT_ESCROW_VAULT"
         className={`rounded-xl border bg-[#0A0D14]/90 p-3.5 space-y-3 transition-all duration-300 ${
           escrowHighlighted
             ? "border-[#00FF9D] ring-2 ring-[#00FF9D]/65 shadow-[0_0_36px_rgba(0,255,157,0.3)]"

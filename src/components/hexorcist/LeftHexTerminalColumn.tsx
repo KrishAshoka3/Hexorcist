@@ -99,6 +99,7 @@ export function LeftHexTerminalColumn({
 
   return (
     <aside
+      data-cinema-target="LEFT_ECU_PANEL"
       className={`flex flex-col gap-4 transition-all duration-300 ${
         isHighlighted
           ? "rounded-2xl ring-2 ring-[#00FF9D]/70 shadow-[0_0_36px_rgba(0,255,157,0.26)] p-1"
@@ -142,7 +143,10 @@ export function LeftHexTerminalColumn({
       )}
 
       {showHexMatrixExpanded && (
-        <div className="rounded-xl border border-white/10 bg-[#0A0D14]/90 p-3.5 shadow-2xl">
+        <div
+          data-cinema-target="LEFT_HEX_STREAM"
+          className="rounded-xl border border-white/10 bg-[#0A0D14]/90 p-3.5 shadow-2xl"
+        >
           <div className="mb-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Terminal className="h-4 w-4 text-[#00FF9D]" />
@@ -257,6 +261,7 @@ export function LeftHexTerminalColumn({
       )}
       {/* Cast Mechanical Curse Deck */}
       <div
+        data-cinema-target="LEFT_CURSE_DECK"
         className={`rounded-xl border p-3.5 transition ${
           activeCurse
             ? "border-[#FF1E42]/60 bg-[#14070B]/90 crimson-glow"
