@@ -4,6 +4,7 @@ import {
   ALL_PID_KEYS,
   UNIVERSAL_PID_REGISTRY,
   VEHICLE_SOUL_PRESETS,
+  auditCANFrameBatch,
   buildCANResponseFrame,
   calculateDynoMetrics,
   calculateEscrowRateCents,
@@ -290,5 +291,182 @@ describe("HEXORCIST — Universal CAN-Bus Hex Engine & FinTech PBT Suite", () =>
     });
     expect(specText).toContain("0B5-398-009-F");
     expect(specText).toContain("HEX-PASS-");
+  });
+
+  it("Property 7: CAN Frame XOR Parity Batch Audit — Deterministic Checksum Validation & Fuzzing Resilience", () => {
+    // Test 1: Empty batch should return zero counts
+    const emptyAudit = auditCANFrameBatch([]);
+    expect(emptyAudit.totalFrames).toBe(0);
+    expect(emptyAudit.validFrames).toBe(0);
+    expect(emptyAudit.checksumPassCount).toBe(0);
+    expect(emptyAudit.successRate).toBe(0);
+    expect(emptyAudit.results).toEqual([]);
+
+    // Test 2: All valid frames should pass 100%
+    const validFrames = ALL_PID_KEYS.map((pidKey) => {
+      const def = UNIVERSAL_PID_REGISTRY[pidKey];
+      return buildCANResponseFrame(pidKey, (def.min + def.max) / 2);
+    });
+    const validAudit = auditCANFrameBatch(validFrames);
+    expect(validAudit.totalFrames).toBe(12);
+    expect(validAudit.validFrames).toBe(12);
+    expect(validAudit.checksumPassCount).toBe(12);
+    expect(validAudit.checksumFailCount).toBe(0);
+    expect(validAudit.successRate).toBe(100);
+    expect(validAudit.results.every((r) => r.checksumValid)).toBe(true);
+
+    // Test 3: Corrupted checksums should be detected
+    const corruptedFrames = ALL_PID_KEYS.map((pidKey) => {
+      const def = UNIVERSAL_PID_REGISTRY[pidKey];
+      const frame = buildCANResponseFrame(pidKey, (def.min + def.max) / 2);
+      const parts = frame.split(" ");
+      const badXor = (parseInt(parts[parts.length - 1], 16) ^ 0x55) & 0xff;
+      parts[parts.length - 1] = badXor.toString(16).toUpperCase().padStart(2, "0");
+      return parts.join(" ");
+    });
+    const corruptedAudit = auditCANFrameBatch(corruptedFrames);
+    expect(corruptedAudit.totalFrames).toBe(12);
+    expect(corruptedAudit.checksumFailCount).toBe(12);
+    expect(corruptedAudit.checksumPassCount).toBe(0);
+    expect(corruptedAudit.successRate).toBe(0);
+    expect(corruptedAudit.results.every((r) => !r.checksumValid)).toBe(true);
+
+    // Test 4: Mixed valid/invalid batch
+    const mixedFrames = [
+      ...validFrames.slice(0, 6),
+      ...corruptedFrames.slice(0, 6),
+    ];
+    const mixedAudit = auditCANFrameBatch(mixedFrames);
+    expect(mixedAudit.totalFrames).toBe(12);
+    expect(mixedAudit.checksumPassCount).toBe(6);
+    expect(mixedAudit.checksumFailCount).toBe(6);
+    expect(mixedAudit.successRate).toBe(50);
+
+    // Test 5: Property-based test with random valid frames
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            pidKey: fc.constantFrom(...ALL_PID_KEYS),
+            value: fc.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }),
+          }),
+          { minLength: 1, maxLength: 50 }
+        ),
+        (testCases) => {
+          const frames = testCases.map((tc) => {
+            const def = UNIVERSAL_PID_REGISTRY[tc.pidKey];
+            const clampedValue = Math.max(def.min, Math.min(def.max, tc.value));
+            return buildCANResponseFrame(tc.pidKey, clampedValue);
+          });
+
+          const audit = auditCANFrameBatch(frames);
+          expect(audit.totalFrames).toBe(frames.length);
+          expect(audit.checksumPassCount).toBe(frames.length);
+          expect(audit.successRate).toBe(100);
+          expect(audit.results).toHaveLength(frames.length);
+
+          // Verify frame index matches array position
+          audit.results.forEach((result, idx) => {
+            expect(result.frameIndex).toBe(idx);
+            expect(result.rawFrame).toBe(frames[idx]);
+            expect(result.checksumValid).toBe(true);
+            expect(result.pidKey).not.toBeNull();
+          });
+        }
+      ),
+      { numRuns: 100 }
+    );
+
+    // Test 6: Property-based test with random corrupted frames
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.record({
+            pidKey: fc.constantFrom(...ALL_PID_KEYS),
+            value: fc.double({ min: 0, max: 1000, noNaN: true, noDefaultInfinity: true }),
+            flipMask: fc.integer({ min: 1, max: 255 }),
+          }),
+          { minLength: 1, maxLength: 50 }
+        ),
+        (testCases) => {
+          const frames = testCases.map((tc) => {
+            const def = UNIVERSAL_PID_REGISTRY[tc.pidKey];
+            const clampedValue = Math.max(def.min, Math.min(def.max, tc.value));
+            const frame = buildCANResponseFrame(tc.pidKey, clampedValue);
+            const parts = frame.split(" ");
+            const badXor = (parseInt(parts[parts.length - 1], 16) ^ tc.flipMask) & 0xff;
+            parts[parts.length - 1] = badXor.toString(16).toUpperCase().padStart(2, "0");
+            return parts.join(" ");
+          });
+
+          const audit = auditCANFrameBatch(frames);
+          expect(audit.totalFrames).toBe(frames.length);
+          expect(audit.checksumFailCount).toBe(frames.length);
+          expect(audit.checksumPassCount).toBe(0);
+          expect(audit.successRate).toBe(0);
+
+          // All results should have mismatched checksums
+          audit.results.forEach((result) => {
+            expect(result.checksumValid).toBe(false);
+            expect(result.expectedChecksumHex).not.toBe(result.actualChecksumHex);
+            expect(result.error).toBeDefined();
+          });
+        }
+      ),
+      { numRuns: 100 }
+    );
+
+    // Test 7: Arbitrary string fuzzing should never throw
+    fc.assert(
+      fc.property(
+        fc.array(fc.string({ maxLength: 200 }), { minLength: 1, maxLength: 100 }),
+        (arbitraryFrames) => {
+          const audit = auditCANFrameBatch(arbitraryFrames);
+          expect(audit).toBeDefined();
+          expect(audit.totalFrames).toBe(arbitraryFrames.length);
+          expect(audit.results).toHaveLength(arbitraryFrames.length);
+          expect(audit.checksumPassCount + audit.checksumFailCount).toBeLessThanOrEqual(
+            arbitraryFrames.length
+          );
+        }
+      ),
+      { numRuns: 200 }
+    );
+
+    // Test 8: Non-string inputs should be safely coerced
+    const coercionTestCases = [
+      null,
+      undefined,
+      42,
+      {},
+      [],
+      true,
+    ];
+    const coercionAudit = auditCANFrameBatch(coercionTestCases as any);
+    expect(coercionAudit.totalFrames).toBe(coercionTestCases.length);
+    expect(coercionAudit.results).toHaveLength(coercionTestCases.length);
+
+    // Test 9: Checksum independence — identical payloads with different checksums
+    // Use a real frame from buildCANResponseFrame to ensure correct structure
+    const validFrame = buildCANResponseFrame("010C", 2000); // RPM frame
+    const parts = validFrame.split(" ");
+    const correctChecksum = parts[parts.length - 1];
+    const baseFrame = parts.slice(0, -1).join(" "); // Everything except checksum
+    
+    const invalidChecksum1 = ((parseInt(correctChecksum, 16) ^ 0x55) & 0xFF).toString(16).toUpperCase().padStart(2, "0");
+    const invalidChecksum2 = "00";
+    
+    const checksumVariants = [
+      `${baseFrame} ${correctChecksum}`,
+      `${baseFrame} ${invalidChecksum1}`,
+      `${baseFrame} ${invalidChecksum2}`,
+    ];
+    const checksumAudit = auditCANFrameBatch(checksumVariants);
+    expect(checksumAudit.totalFrames).toBe(3);
+    expect(checksumAudit.checksumPassCount).toBe(1);
+    expect(checksumAudit.checksumFailCount).toBe(2);
+    expect(checksumAudit.results[0].checksumValid).toBe(true);
+    expect(checksumAudit.results[1].checksumValid).toBe(false);
+    expect(checksumAudit.results[2].checksumValid).toBe(false);
   });
 });

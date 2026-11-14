@@ -994,4 +994,76 @@ export function generateSampleTelemetryCsv(vehicleId: VehicleArchitectureId): st
   return rows.join("\n");
 }
 
+export interface CANFrameAuditResult {
+  frameIndex: number;
+  rawFrame: string;
+  checksumValid: boolean;
+  canId: string;
+  expectedChecksumHex: string;
+  actualChecksumHex: string;
+  pidKey: PidKey | null;
+  value: number | null;
+  error?: string;
+}
+
+export interface CANFrameBatchAuditReport {
+  totalFrames: number;
+  validFrames: number;
+  invalidFrames: number;
+  checksumPassCount: number;
+  checksumFailCount: number;
+  successRate: number;
+  results: CANFrameAuditResult[];
+}
+
+/**
+ * Batch XOR Parity Auditor for CAN Frame Arrays
+ * 
+ * Validates XOR checksums for multiple CAN frames in a single call,
+ * returning detailed audit results for each frame. Useful for verifying
+ * telemetry logs, testing data integrity, and debugging communication issues.
+ * 
+ * @param rawFrames - Array of raw CAN frame strings (e.g., ["7E8 03 41 0C 1F 40 5C", ...])
+ * @returns Detailed batch audit report with per-frame validation results
+ */
+export function auditCANFrameBatch(rawFrames: string[]): CANFrameBatchAuditReport {
+  const safeFrames = Array.isArray(rawFrames)
+    ? rawFrames.map((f) => (typeof f === "string" ? f : String(f ?? "")))
+    : [];
+
+  const results: CANFrameAuditResult[] = safeFrames.map((rawFrame, index) => {
+    const parsed = parseRawCANFrame(rawFrame);
+
+    return {
+      frameIndex: index,
+      rawFrame: rawFrame,
+      checksumValid: parsed.checksumValid,
+      canId: parsed.canId || "--",
+      expectedChecksumHex: parsed.expectedChecksumHex || "--",
+      actualChecksumHex: parsed.checksumHex || "--",
+      pidKey: parsed.pidKey,
+      value: parsed.value,
+      error: parsed.valid ? undefined : parsed.error,
+    };
+  });
+
+  const checksumPassCount = results.filter((r) => r.checksumValid).length;
+  const checksumFailCount = results.filter((r) => !r.checksumValid).length;
+  const validFrames = results.filter((r) => r.checksumValid && r.pidKey !== null).length;
+  const invalidFrames = results.length - validFrames;
+
+  return {
+    totalFrames: results.length,
+    validFrames,
+    invalidFrames,
+    checksumPassCount,
+    checksumFailCount,
+    successRate:
+      results.length > 0
+        ? Math.round((checksumPassCount / results.length) * 10000) / 100
+        : 0,
+    results,
+  };
+}
+
 

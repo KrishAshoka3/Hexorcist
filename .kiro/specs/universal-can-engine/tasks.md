@@ -30,4 +30,4 @@
   - [x] 5.4 Right Column with SAE J2012 bitmask visualizer, Live Vertex AI Autopsy trigger, and Autonomous FinTech Escrow Sandbox Ledger commute/release modals
   - [x] 5.5 Self-Running 2-Minute Visual Cinema Pitch Director & 60fps VP9 `.webm` Tab Recorder (`src/components/DemoVideoDirector.tsx`)
 
-- [ ] 6. Add CAN Frame XOR Parity Batch Audit helper function to src/lib/obd-hex-engine.ts and verify with fast-check
+- [x] 6. Add CAN Frame XOR Parity Batch Audit helper function to src/lib/obd-hex-engine.ts and verify with fast-check
