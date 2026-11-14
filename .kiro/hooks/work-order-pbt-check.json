@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Work Order Validator Property-Based Test Check",
+      "description": "Runs fast-check property-based tests automatically whenever the work order validator is saved, ensuring VIN, DTC, financial, and UDS validation integrity.",
+      "trigger": "PostFileSave",
+      "matcher": "src/lib/work-order-validator\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "npx vitest run src/lib/work-order-validator.test.ts"
+      }
+    }
+  ]
+}

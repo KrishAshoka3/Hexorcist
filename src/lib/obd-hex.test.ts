@@ -469,4 +469,136 @@ describe("HEXORCIST — Universal CAN-Bus Hex Engine & FinTech PBT Suite", () =>
     expect(checksumAudit.results[1].checksumValid).toBe(false);
     expect(checksumAudit.results[2].checksumValid).toBe(false);
   });
+
+  it("Property 8: SAE J1979 Coolant Temperature Boundary (-40°C minimum)", () => {
+    // PID 0x05 (0105) encodes coolant temp as: byte = (temp°C + 40)
+    // Valid range: -40°C to +215°C
+    const coolantPid = UNIVERSAL_PID_REGISTRY["0105"];
+    
+    // Test exact minimum boundary (-40°C)
+    const minTempFrame = buildCANResponseFrame("0105", -40);
+    const minParsed = parseRawCANFrame(minTempFrame);
+    expect(minParsed.valid).toBe(true);
+    expect(minParsed.value).toBe(-40);
+    expect(minParsed.isWarning).toBe(true); // Below warnLow threshold
+    
+    // Property: Values at or near -40°C should encode to byte 0x00 and decode correctly
+    fc.assert(
+      fc.property(
+        fc.double({ min: -40, max: -39, noNaN: true, noDefaultInfinity: true }),
+        (temp) => {
+          const encodedBytes = coolantPid.encode(temp);
+          expect(encodedBytes).toHaveLength(1);
+          
+          // At -40°C, encoded byte should be 0
+          if (temp === -40) {
+            expect(encodedBytes[0]).toBe(0);
+          } else {
+            expect(encodedBytes[0]).toBeGreaterThanOrEqual(0);
+            expect(encodedBytes[0]).toBeLessThanOrEqual(1);
+          }
+          
+          const decoded = coolantPid.decode(encodedBytes);
+          expect(Math.abs(decoded - temp)).toBeLessThanOrEqual(coolantPid.tolerance);
+          
+          // Full round-trip through CAN frame
+          const frame = buildCANResponseFrame("0105", temp);
+          const parsed = parseRawCANFrame(frame);
+          expect(parsed.valid).toBe(true);
+          expect(Math.abs((parsed.value as number) - temp)).toBeLessThanOrEqual(
+            coolantPid.tolerance
+          );
+        }
+      ),
+      { numRuns: 200 }
+    );
+    
+    // Property: Below -40°C should clamp to -40°C
+    fc.assert(
+      fc.property(
+        fc.double({ min: -100, max: -40.01, noNaN: true, noDefaultInfinity: true }),
+        (belowMin) => {
+          const encodedBytes = coolantPid.encode(belowMin);
+          const decoded = coolantPid.decode(encodedBytes);
+          expect(decoded).toBe(-40);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it("Property 9: SAE J1979 Engine Speed Boundary (16383.75 RPM maximum)", () => {
+    // PID 0x0C (010C) encodes RPM as: uint16 = RPM × 4
+    // Valid range: 0 RPM to 16383.75 RPM (in 0.25 RPM increments)
+    const rpmPid = UNIVERSAL_PID_REGISTRY["010C"];
+    
+    // Test exact maximum boundary (16383.75 RPM)
+    const maxRpmFrame = buildCANResponseFrame("010C", 16383.75);
+    const maxParsed = parseRawCANFrame(maxRpmFrame);
+    expect(maxParsed.valid).toBe(true);
+    expect(maxParsed.value).toBe(16383.75);
+    expect(maxParsed.isWarning).toBe(true); // Above warnHigh threshold (7200)
+    
+    // Property: Values at or near maximum (16383.75 RPM) should encode to 0xFFFF and decode correctly
+    fc.assert(
+      fc.property(
+        fc.double({ min: 16383, max: 16383.75, noNaN: true, noDefaultInfinity: true }),
+        (rpm) => {
+          const encodedBytes = rpmPid.encode(rpm);
+          expect(encodedBytes).toHaveLength(2);
+          
+          // At 16383.75 RPM, encoded uint16 should be 65535 (0xFFFF)
+          if (rpm === 16383.75) {
+            expect(encodedBytes[0]).toBe(0xFF);
+            expect(encodedBytes[1]).toBe(0xFF);
+          } else {
+            const encoded16 = (encodedBytes[0] << 8) | encodedBytes[1];
+            expect(encoded16).toBeGreaterThanOrEqual(65532); // Near maximum
+            expect(encoded16).toBeLessThanOrEqual(65535);
+          }
+          
+          const decoded = rpmPid.decode(encodedBytes);
+          expect(Math.abs(decoded - rpm)).toBeLessThanOrEqual(rpmPid.tolerance);
+          
+          // Full round-trip through CAN frame
+          const frame = buildCANResponseFrame("010C", rpm);
+          const parsed = parseRawCANFrame(frame);
+          expect(parsed.valid).toBe(true);
+          expect(Math.abs((parsed.value as number) - rpm)).toBeLessThanOrEqual(
+            rpmPid.tolerance
+          );
+        }
+      ),
+      { numRuns: 200 }
+    );
+    
+    // Property: Above 16383.75 RPM should clamp to 16383.75 RPM
+    fc.assert(
+      fc.property(
+        fc.double({ min: 16383.76, max: 20000, noNaN: true, noDefaultInfinity: true }),
+        (aboveMax) => {
+          const encodedBytes = rpmPid.encode(aboveMax);
+          const decoded = rpmPid.decode(encodedBytes);
+          expect(decoded).toBe(16383.75);
+        }
+      ),
+      { numRuns: 100 }
+    );
+    
+    // Property: 0.25 RPM granularity quantization
+    fc.assert(
+      fc.property(
+        fc.double({ min: 1000, max: 8000, noNaN: true, noDefaultInfinity: true }),
+        (rpm) => {
+          const frame = buildCANResponseFrame("010C", rpm);
+          const parsed = parseRawCANFrame(frame);
+          
+          // Verify decoded value is quantized to 0.25 RPM increments
+          const quantized = Math.round((parsed.value as number) * 4) / 4;
+          expect(Math.abs((parsed.value as number) - quantized)).toBeLessThan(0.01);
+        }
+      ),
+      { numRuns: 200 }
+    );
+  });
 });
