@@ -442,7 +442,7 @@ describe("HEXORCIST — Universal CAN-Bus Hex Engine & FinTech PBT Suite", () =>
       [],
       true,
     ];
-    const coercionAudit = auditCANFrameBatch(coercionTestCases as any);
+    const coercionAudit = auditCANFrameBatch(coercionTestCases as unknown as string[]);
     expect(coercionAudit.totalFrames).toBe(coercionTestCases.length);
     expect(coercionAudit.results).toHaveLength(coercionTestCases.length);
 

@@ -46,6 +46,7 @@ interface RightNecromancerVaultColumnProps {
   activeDtc: string;
   hasActiveFault?: boolean;
   activeCurse?: MechanicalCursePreset | null;
+  vehicleLabel?: string;
   telemetry?: Partial<Record<PidKey, number>>;
   shopQuoteUsd?: number;
   onChangeShopQuoteUsd?: (usd: number) => void;
@@ -70,6 +71,7 @@ export function RightNecromancerVaultColumn({
   activeDtc,
   hasActiveFault = false,
   activeCurse = null,
+  vehicleLabel,
   telemetry,
   shopQuoteUsd: controlledShopQuoteUsd,
   onChangeShopQuoteUsd,
@@ -307,10 +309,10 @@ export function RightNecromancerVaultColumn({
 
             <input
               type="range"
-              min={500}
+              min={300}
               max={4500}
               step={10}
-              value={Math.min(4500, Math.max(500, effectiveShopQuoteUsd))}
+              value={Math.min(4500, Math.max(300, effectiveShopQuoteUsd))}
               onChange={(e) => updateShopQuote(Number(e.target.value))}
               aria-label="Compare Shop Quote Slider"
               className="w-full accent-[#00E5FF] cursor-pointer"
@@ -319,8 +321,29 @@ export function RightNecromancerVaultColumn({
             <div className="flex flex-wrap gap-1 text-[9px]">
               {[
                 { label: `Fair Book ($${quoteAudit.fairEstimateUsd})`, val: quoteAudit.fairEstimateUsd },
-                { label: "Indy ($1,550)", val: 1550 },
-                { label: "Dealer Quote ($2,450)", val: 2450 },
+                {
+                  label: `Indy ($${Math.round((quoteAudit.fairEstimateUsd * 1.06) / 10) * 10})`,
+                  val: Math.round((quoteAudit.fairEstimateUsd * 1.06) / 10) * 10,
+                },
+                {
+                  label: `Dealer Quote ($${
+                    quoteAudit.fairEstimateUsd === 1480
+                      ? "2,450"
+                      : quoteAudit.fairEstimateUsd === 1120
+                      ? "2,100"
+                      : quoteAudit.fairEstimateUsd === 420
+                      ? "980"
+                      : Math.round((quoteAudit.fairEstimateUsd * 1.65) / 10) * 10
+                  })`,
+                  val:
+                    quoteAudit.fairEstimateUsd === 1480
+                      ? 2450
+                      : quoteAudit.fairEstimateUsd === 1120
+                      ? 2100
+                      : quoteAudit.fairEstimateUsd === 420
+                      ? 980
+                      : Math.round((quoteAudit.fairEstimateUsd * 1.65) / 10) * 10,
+                },
               ].map((preset, idx) => (
                 <button
                   key={`${preset.label}-${idx}`}
@@ -395,6 +418,28 @@ export function RightNecromancerVaultColumn({
           <span className="rounded bg-[#00FF9D]/15 px-2 py-0.5 font-mono text-[10px] text-[#00FF9D]">
             FINTECH SANDBOX
           </span>
+        </div>
+
+        <div className="rounded-lg border border-[#00E5FF]/25 bg-[#05080E] px-3 py-2 font-mono text-[11px] space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-slate-300">
+              Target ({vehicleLabel ?? "Active Vehicle"}):
+            </span>
+            <span className="font-bold text-[#00FF9D] shrink-0">
+              ${baselineFairUsd.toLocaleString()} Fair Repair Goal
+            </span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+            <div
+              className="h-full bg-gradient-to-r from-[#00E5FF] to-[#00FF9D] transition-all duration-300"
+              style={{
+                width: `${Math.min(
+                  100,
+                  Math.max(4, Math.round((escrowBalanceCents / Math.max(100, baselineFairUsd * 100)) * 100))
+                )}%`,
+              }}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2.5 rounded-lg border border-white/10 bg-[#05070B] p-3 font-mono">

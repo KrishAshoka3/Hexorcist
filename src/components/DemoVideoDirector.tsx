@@ -29,6 +29,22 @@ import {
   startChillBackgroundMusic,
   stopChillBackgroundMusic,
 } from "@/lib/sound-fx";
+import {
+  DEFAULT_DRIVING_SLIDERS,
+  DrivingStressSlidersState,
+  FrankensteinStageId,
+  QuickVehiclePresetId,
+  UserPowertrainType,
+  UserTransmissionType,
+  WorkspaceTabId,
+  getWorkspaceTabForScene,
+} from "@/lib/custom-car-and-sliders";
+import type { MechanicalCursePreset } from "@/lib/obd-hex-engine";
+import type { ObdModuleId } from "@/lib/obd-scanner-qol";
+import type { GeneratedVehicleFault } from "@/lib/vehicle-fault-generator";
+import type { EngineerSubTabId } from "./hexorcist/EngineerAndKiroTab";
+
+export { getWorkspaceTabForScene };
 
 export type CinemaSpotlightPanelId =
   | "FAULT_HEX"
@@ -40,6 +56,29 @@ export type CinemaSpotlightPanelId =
   | "ROAD_DYNO";
 
 export type CinemaDomTargetId =
+  | "TOP_VEHICLE_BAR"
+  | "FRANKENSTEIN_PIPELINE"
+  | "TOP_HARDWARE_DOCK"
+  | "DOCK_OBD_HARDWARE"
+  | "DOCK_CSV_DROPZONE"
+  | "DOCK_LOAD_SAMPLE_CSV"
+  | "DOCK_CSV_SCRUBBER"
+  | "DOCK_VEHICLE_GARAGE"
+  | "VEHICLE_INPUT_BAR"
+  | "SANDBOX_CONTROL_BAR"
+  | "SIMULATE_RANDOM_FAULT_BTN"
+  | "REROLL_RANDOM_FAULT_BTN"
+  | "XRAY_CHASSIS"
+  | "XRAY_NODE_ECM"
+  | "XRAY_NODE_TCM"
+  | "XRAY_NODE_ABS"
+  | "XRAY_NODE_BCM"
+  | "VEHICLE_SELECTOR_POPOVER"
+  | "ENTER_OWN_CAR_BTN"
+  | "OWN_CAR_MODAL_CARD"
+  | "DRIVING_STRESS_SLIDERS"
+  | "PART_WEAR_SLIDER"
+  | "KIRO_VALIDATOR_BADGE"
   | "LEFT_ECU_PANEL"
   | "LEFT_CURSE_DECK"
   | "LEFT_HEX_STREAM"
@@ -56,6 +95,7 @@ export type CinemaDomTargetId =
   | "MODAL_DBC_MATRIX"
   | "MODAL_CSV_SCRUBBER"
   | "VIN_MODAL_CARD"
+  | "ROAD_DYNO_CARD"
   | "KIRO_PBT_CARD";
 
 export type CinemaSceneNumber = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -84,112 +124,119 @@ function defineScene(
   };
 }
 
-export const TOTAL_CINEMA_DURATION_MS = 152_000; // 2:32 (~152 seconds, safely under 3:00 limit)
+export const TOTAL_CINEMA_DURATION_MS = 165_000; // 2:45 full Obsidian HMI tour
 
 export const CINEMA_SCENES: CinemaSceneConfig[] = [
   defineScene({
-    id: "scene-1-everyday-problem",
+    id: "scene-1-frankenstein-chimera",
     sceneNumber: 1,
     startMs: 0,
-    endMs: 16_000,
-    badge: "SCENE 1 OF 8 • FULL-SCREEN INTRO (0:00–0:16)",
+    endMs: 15_000,
+    badge: "SCENE 1 OF 8 • FRANKENSTEIN CHIMERA OS (0:00–0:15)",
     headline:
-      "Meet HEXORCIST: Your Car's Translator, AI Mechanic, Fair-Price Auditor & Automatic Repair Vault",
+      "HEXORCIST Obsidian OS: Stitching OBD-II Hardware, Vertex AI & FinTech Escrow",
     plainEnglish:
-      "When your Check Engine Light turns on, your car speaks in cryptic trouble codes, dealers hand you an overpriced quote, and your bank account isn't ready. HEXORCIST solves all four in one place.",
+      "Cars speak in raw CAN-bus hex, dealerships overcharge by hundreds, and surprise repairs wreck budgets. HEXORCIST unifies all three inside an OEM-caliber digital cockpit.",
     underTheHood:
-      "Unifying 4-module SAE J1979 OBD-II scanning, Google Cloud Vertex AI root-cause & fair-price auditing, and cent-exact per-mile FinTech repair escrow.",
+      "SAE J1979 / ISO 14229 CAN-FD telemetry + Interactive SVG X-Ray Chassis + Vertex AI Gemini 2.5 Flash + Double-Entry FinTech Escrow.",
     accentTone: "PHOSPHOR",
   }),
   defineScene({
-    id: "scene-2-healthy-heartbeat",
+    id: "scene-2-top-hardware-csv-dock",
     sceneNumber: 2,
-    startMs: 16_000,
-    endMs: 34_000,
-    badge: "SCENE 2 OF 8 • HEALTHY HEARTBEAT & PLAIN-ENGLISH TOOLTIPS (0:16–0:34)",
-    headline: "Healthy Engine Heartbeat & Plain-English Sensor Explanations (?)",
+    startMs: 15_000,
+    endMs: 42_000,
+    badge: "SCENE 2 OF 8 • CUSTOM VEHICLE INPUT & CSV PRIORITY OVERRIDE (0:15–0:42)",
+    headline:
+      "Stage 01: Custom Vehicle Input Bar, CSV Override Lockout & Sandbox Calibration",
     plainEnglish:
-      "In Focused Mode, the green EKG oscilloscope confirms target and actual pressure match cleanly, while (?) tooltips translate terms like STFT %, Target vs. Actual Pressure, and Terminal 30 Voltage into everyday English.",
+      "Switches from a 2014 Audi S4 DSG to a 2024 Dual-Motor EV and 2022 Ford F-150 5.0L Automatic, shows how loading a CSV log overrides and locks out the simulator, then returns to Sandbox mode.",
     underTheHood:
-      "Streaming 25Hz SAE J1979 / UDS telemetry with progressive disclosure and newcomer-friendly inline KPI definitions.",
+      "Strict Data Source Priority Engine (WebSerial OBD-II > CSV Log Replay > Vehicle-Accurate Sandbox Simulator) + OEM part calibration.",
     accentTone: "PHOSPHOR",
   }),
   defineScene({
-    id: "scene-3-obd-scanner-triage",
+    id: "scene-3-svg-xray-and-sliders",
     sceneNumber: 3,
-    startMs: 34_000,
-    endMs: 54_000,
-    badge: "SCENE 3 OF 8 • FAULT INJECTION & 4-MODULE OBD-II SCANNER (0:34–0:54)",
-    headline: "Multi-Module OBD-II Sweep (ECM/TCM/ABS/BCM), Freeze-Frame & Road Safety Triage",
+    startMs: 42_000,
+    endMs: 62_000,
+    badge: "SCENE 3 OF 8 • RANDOMIZED CAR-ACCURATE FAULT & SVG X-RAY (0:42–1:02)",
+    headline:
+      "Stage 02A: Vehicle-Accurate Randomized Fault Engine & Dynamic SVG X-Ray Targeting",
     plainEnglish:
-      "Simulating a failing transmission valve triggers our 4-module scanner sweep—catching confirmed code P0750 in the TCM, capturing the Freeze-Frame snapshot, and flashing a '🟡 CAUTION: CAN I DRIVE THIS?' safety banner.",
+      "Clicks '🎲 Simulate Random Issue' (and 'Re-Roll Another Issue') to roll authentic, non-repeating car-specific faults—lighting up the exact affected ECU ([ECM]/[TCM]/[ABS]/[BCM]) and spiking the 60fps Heart Monitor!",
     underTheHood:
-      "Polls 0x7E8 ECM, 0x7E9 TCM, 0x7EA ABS & 0x7EB BCM across SAE J1979 Modes $02/$03/$07/$0A with automated road-safety triage.",
+      "Powertrain-invariant fault pools (EV excludes combustion/TCM; Manual excludes TCM) + brand-stamped OEM part numbers (JL3Z-... / 0B5-... / 1089334-...).",
     accentTone: "CRIMSON",
   }),
   defineScene({
-    id: "scene-4-ai-mechanic-quote-checker",
+    id: "scene-4-multi-ecu-scanner-triage",
     sceneNumber: 4,
-    startMs: 54_000,
-    endMs: 76_000,
-    badge: "SCENE 4 OF 8 • VERTEX AI AUTOPSY & OVERCHARGE DETECTOR (0:54–1:16)",
-    headline: "Google Cloud Vertex AI Diagnosis & Mechanic Quote Fair-Price Checker",
+    startMs: 62_000,
+    endMs: 82_000,
+    badge: "SCENE 4 OF 8 • 4-MODULE OBD-II SWEEP & SAFETY TRIAGE (1:02–1:22)",
+    headline:
+      'Stage 02B: 4-Module OBD-II Scanner & "Can I Drive This?" Safety Triage Banner',
     plainEnglish:
-      "Vertex AI pinpoints the exact OEM repair kit ($1,480 fair book total: $420 parts + 6.5 hrs @ $163/hr), while the Shop Quote Checker instantly flags a $2,450 dealer quote as $970 overpriced (+65%).",
+      "Sweeps ECM, TCM, ABS & BCM simultaneously—isolating the active fault on its exact ECU while the other 3 modules show 🟢 PASS—and displays plain-English road safety guidance.",
     underTheHood:
-      "Gemini 2.5 Flash on Vertex AI (/api/autopsy) decodes SAE J2012 bitmask 0x07 0x50 and audits shop quotes against OEM book labor & parts.",
+      "Polls 0x7E8..0x7EB across SAE J1979 Modes $02/$03/$07/$0A with automated SAFE / CAUTION / DO NOT DRIVE triage.",
     accentTone: "CRIMSON",
   }),
   defineScene({
-    id: "scene-5-repair-vault",
+    id: "scene-5-vertex-ai-ripoff-detector",
     sceneNumber: 5,
-    startMs: 76_000,
-    endMs: 96_000,
-    badge: "SCENE 5 OF 8 • AUTO-SAVE VAULT & MECHANIC WORK ORDER (1:16–1:36)",
-    headline: "Per-Mile Auto-Save Repair Vault & Printable Mechanic Spec Sheet",
+    startMs: 82_000,
+    endMs: 104_000,
+    badge: "SCENE 5 OF 8 • VERTEX AI MECHANIC & QUOTE OVERCHARGE AUDIT (1:22–1:44)",
+    headline:
+      "Stage 03: Google Cloud Vertex AI Diagnosis & Shop Quote Overcharge Detector",
     plainEnglish:
-      "HEXORCIST automatically boosts your per-mile repair savings rate, deposits a 25-mile commute reserve, and generates a Printable Mechanic Spec Sheet & Escrow Pass so you can skip the $200 shop diagnostic fee.",
+      "Vertex AI Mechanic translates the newly rolled fault into plain English with brand-matched OEM part pricing and catches dealership markup ripoffs automatically!",
     underTheHood:
-      "Monotonic cent-exact FinTech sinking-fund ledger ($0.05/mi -> $2.90/mi) paired with a pre-funded ISO 3779 VIN & Freeze-Frame work order.",
-    accentTone: "PHOSPHOR",
+      "Gemini 2.5 Flash (/api/autopsy) decodes SAE J2012 bitmask, OEM part catalog, and fair book labor vs. dealer quote.",
+    accentTone: "CRIMSON",
   }),
   defineScene({
-    id: "scene-6-reset-car",
+    id: "scene-6-fintech-escrow-kiro-work-order",
     sceneNumber: 6,
-    startMs: 96_000,
-    endMs: 114_000,
-    badge: "SCENE 6 OF 8 • MODE $04 CLEAR & UDS EXORCISM (1:36–1:54)",
-    headline: "Clearing Check Engine Light (Mode $04) & Restoring 100% ECU Health",
+    startMs: 104_000,
+    endMs: 126_000,
+    badge: "SCENE 6 OF 8 • FINTECH ESCROW VAULT & KIRO WORK ORDER (1:44–2:06)",
+    headline:
+      "Stage 04A: Save-Per-Mile Escrow Vault & Kiro-Verified Printable Work Order",
     plainEnglish:
-      "One click transmits Mode $04 to wipe active/pending codes and turn off the Check Engine Light, followed by Bidirectional UDS calibration—turning all modules PASS and restoring 100% green health.",
+      "Simulates a 25-mile commute into balanced Double-Entry Escrow (Assets = Liabilities + Equity) and opens the Printable Mechanic Work Order carrying '✅ Verified by Kiro Work-Order Validator'.",
     underTheHood:
-      "Broadcasts SAE J1979 TX: 7DF 01 04 -> RX: 7E8 01 44 plus ISO 14229 UDS RoutineControl TX: 7E0 04 31 01 F4 0A.",
+      "Monotonic cent-exact sinking-fund ledger ($0.05/mi -> $2.90/mi) + ISO 3779 / UDS validation via src/lib/work-order-validator.ts.",
     accentTone: "PHOSPHOR",
   }),
   defineScene({
-    id: "scene-7-any-vin-pro-mode",
+    id: "scene-7-mode-04-reset-xray-pass",
     sceneNumber: 7,
-    startMs: 114_000,
-    endMs: 136_000,
-    badge: "SCENE 7 OF 8 • VIN DECODER, PRO MODE, .DBC & DYNO (1:54–2:16)",
-    headline: "Universal 17-Digit VIN Decoder, Engineer Pro Mode, .DBC Matrix & Road Dyno",
+    startMs: 126_000,
+    endMs: 142_000,
+    badge: "SCENE 7 OF 8 • MODE $04 ECU RESET -> X-RAY CHASSIS PASS (2:06–2:22)",
+    headline:
+      "One-Click Clear Codes (Mode $04) Restores SVG Vehicle X-Ray Nodes to 🟢 PASS",
     plainEnglish:
-      "Flip to Engineer Pro Mode to inspect 64-bit .DBC network signals and CSV drive logs, or decode any real 17-digit US DOT VIN to run a calibrated Wide-Open-Throttle Road Dyno pull.",
+      "Broadcasts SAE J1979 Mode $04 across the CAN bus—turning off the Check Engine Light and restoring every node on the Interactive SVG Vehicle X-Ray Chassis back to Emerald 🟢 PASS!",
     underTheHood:
-      "Live US DOT NHTSA vPIC 17-digit VIN lookup, 64-bit OpenDBC bit matrix, ISO 15765-4 CSV replay & WOT Virtual Road Dyno (2,000–7,000 RPM).",
+      "Functional broadcast TX: 7DF 01 04 -> RX: 7E8 01 44 + ISO 14229 UDS RoutineControl TX: 7E0 04 31 01 F4 0A.",
     accentTone: "PHOSPHOR",
   }),
   defineScene({
-    id: "scene-8-kiro-architecture",
+    id: "scene-8-engineer-pro-kiro-suite",
     sceneNumber: 8,
-    startMs: 136_000,
-    endMs: 152_000,
-    badge: "SCENE 8 OF 8 • KIRO ARCHITECTURE & PBT PROOFS (2:16–2:32)",
-    headline: "Engineered with Kiro Specs, Agent Hooks, MCP & fast-check Property-Based Testing",
+    startMs: 142_000,
+    endMs: 165_000,
+    badge: "SCENE 8 OF 8 • ENGINEER PRO, DYNO & KIRO PBT SUITE (2:22–2:45)",
+    headline:
+      "Stage 04B: 64-Bit .DBC Matrix, Virtual Road Dyno & Kiro Property-Based Proofs",
     plainEnglish:
-      "Every sensor byte, DTC lookup, fair-price audit, and cent of escrow math is mathematically verified using Kiro EARS Specifications, Agent Hooks, US DOT MCP, and fast-check Property-Based Testing.",
+      "Opens the Engineer Pro & Kiro Verification Suite: 64-bit OpenDBC bit matrix, live WOT Virtual Road Dyno pull, and Kiro EARS Specs + Agent Hooks + 280+ passing fast-check Property Tests.",
     underTheHood:
-      "Spec-driven .kiro/specs EARS requirements, PostFileSave Vitest Agent Hooks, standalone NHTSA MCP server & fast-check PBT suites.",
+      ".kiro/specs/ + PostFileSave Vitest Hooks + US DOT NHTSA MCP Server + live browser fast-check invariant suite.",
     accentTone: "PHOSPHOR",
   }),
 ];
@@ -227,6 +274,25 @@ export interface DemoVideoDirectorProps {
   onExecuteWotDynoPull: () => void;
   onOpenKiroProofsDrawer: () => void;
   onCloseAllOverlaysForFinale: () => void;
+  onSetOwnCarModalOpen?: (open: boolean) => void;
+  onSetVehiclePopoverOpen?: (open: boolean) => void;
+  onSelectQuickPresetHealthy?: (presetId: QuickVehiclePresetId) => void;
+  onSetDrivingSliders?: (sliders: DrivingStressSlidersState) => void;
+  activeTab?: WorkspaceTabId;
+  onSwitchWorkspaceTab?: (tab: WorkspaceTabId, subTab?: EngineerSubTabId) => void;
+  onLoadTopDockSampleCsv?: () => void;
+  onSeekTopDockCsv?: (index: number) => void;
+  onExitTopDockCsv?: () => void;
+  onSelectXRayModule?: (moduleId: ObdModuleId) => void;
+  onSetPipelineStageOverride?: (stageId: FrankensteinStageId | null) => void;
+  onSetBentoCockpitView?: (enabled: boolean) => void;
+  activeCurse?: MechanicalCursePreset | null;
+  onApplyInlineVehicle?: (spec: {
+    yearMakeModel: string;
+    powertrainType: UserPowertrainType;
+    transmissionType: UserTransmissionType;
+  }) => void;
+  onRollRandomFault?: () => GeneratedVehicleFault | null;
 }
 
 interface CalloutTargetState {
@@ -256,31 +322,31 @@ function formatTimecode(ms: number): string {
 const INTRO_STORY_STEPS = [
   {
     id: "car-code",
-    icon: "🔍",
-    title: "4-Module OBD-II Scanner",
-    desc: "Sweeps ECM, TCM, ABS & BCM with plain-English tooltips & road-safety triage",
-    techTag: "SAE J1979 0x7E8..0x7EB",
+    icon: "🚗",
+    title: "Enter Your Car + 4-Module Scanner",
+    desc: "Load any car by name or 17-digit VIN, test live stress sliders & scan ECM/TCM/ABS/BCM",
+    techTag: "No VIN Needed + SAE J1979",
   },
   {
     id: "ai-mechanic",
     icon: "🛡️",
-    title: "Vertex AI & Fair-Price Auditor",
-    desc: "Pinpoints the $1,480 OEM repair & flags overpriced $2,450 dealer quotes",
+    title: "Vertex AI & Fair-Price Checker",
+    desc: "Explains the broken part in plain English ($1,480) & catches $970 shop overcharges",
     techTag: "Gemini 2.5 Flash Audit",
   },
   {
     id: "piggy-bank",
     icon: "🏦",
-    title: "Auto-Save Vault & Work Order",
-    desc: "Auto-saves per mile you drive & prints a Mechanic Spec Sheet + Escrow Pass",
-    techTag: "Cent-Exact FinTech Vault",
+    title: "Save-Per-Mile Vault & Kiro Pass",
+    desc: "Auto-saves repair cash while you drive & prints a Kiro-Verified Mechanic Work Order",
+    techTag: "Kiro Validator + FinTech Vault",
   },
 ] as const;
 
 const CLOSING_PILLARS = [
-  { id: "can-bus", code: "4-MODULE OBD-II + UDS", label: "ECM/TCM/ABS/BCM Scanner & Mode $04 Reset" },
-  { id: "vertex-ai", code: "VERTEX AI + QUOTE AUDIT", label: "Root Cause, Safety Triage & Overcharge Detector" },
-  { id: "fintech-escrow", code: "$0.05 -> $2.90/MI", label: "Auto-Save Vault & Printable Mechanic Pass" },
+  { id: "can-bus", code: "ANY CAR + 4-ECU SCANNER", label: "Custom Car Builder, Stress Sliders & Mode $04 Reset" },
+  { id: "vertex-ai", code: "VERTEX AI + QUOTE CHECKER", label: "Plain-English Diagnosis & $970 Overcharge Detector" },
+  { id: "fintech-escrow", code: "KIRO VERIFIED + VAULT", label: "Save-Per-Mile Escrow & Printable Mechanic Pass" },
 ] as const;
 
 export function DemoVideoDirector(props: DemoVideoDirectorProps) {
@@ -317,7 +383,35 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
     onExecuteWotDynoPull,
     onOpenKiroProofsDrawer,
     onCloseAllOverlaysForFinale,
+    onSetOwnCarModalOpen,
+    onSetVehiclePopoverOpen,
+    onSelectQuickPresetHealthy,
+    onSetDrivingSliders,
+    onSwitchWorkspaceTab,
+    onLoadTopDockSampleCsv,
+    onSeekTopDockCsv,
+    onExitTopDockCsv,
+    onSelectXRayModule,
+    onSetPipelineStageOverride,
+    onSetBentoCockpitView,
+    activeCurse,
+    onApplyInlineVehicle,
+    onRollRandomFault,
   } = props;
+
+  const switchWorkspace = useCallback(
+    (tab: WorkspaceTabId, subTab?: EngineerSubTabId) => {
+      onSwitchWorkspaceTab?.(tab, subTab);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("hexorcist:switch-tab", {
+            detail: { tab, subTab },
+          })
+        );
+      }
+    },
+    [onSwitchWorkspaceTab]
+  );
 
   const [elapsedMs, setElapsedMs] = useState<number>(0);
   const [paused, setPaused] = useState<boolean>(false);
@@ -543,295 +637,349 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
       }
     };
 
-    // Scene 1 (0:00–0:16): Full-Screen Intro Card -> Dissolve to Healthy Dashboard
+    // Scene 1 (0:00–0:15): Cinematic Title Card introducing the Frankenstein Chimera
     fireOnce("s1-init", 0, () => {
+      onSetBentoCockpitView?.(false);
+      onSetPipelineStageOverride?.("STAGE_01_INGEST");
       onResetNominalFocused();
+      switchWorkspace("LIVE_HEALTH");
+      onSelectQuickPresetHealthy?.("PRESET_2014_V6_DSG");
+      onSelectXRayModule?.("02_TCM");
       onSetCinemaTooltipPid(null);
+      onSetVehiclePopoverOpen?.(false);
+      onSetOwnCarModalOpen?.(false);
+      onSetDrivingSliders?.(DEFAULT_DRIVING_SLIDERS);
       onSetMechanicSpecModalOpen(false);
       onSetShopQuoteUsd(2450);
       onSpotlightPanel(null);
       setCalloutTarget(null);
     });
-    fireOnce("s1-dissolve-dashboard", 15_000, () => {
+
+    // Scene 2 (0:15–0:42): Custom Car Vehicle Input Bar -> CSV Override Lockout -> Return to Sandbox
+    fireOnce("s2-spotlight-vehicle-input", 15_000, () => {
       playHexSound("CLICK");
-      onSpotlightPanel("OSCILLOSCOPE");
+      onSetBentoCockpitView?.(false);
+      onSetPipelineStageOverride?.("STAGE_01_INGEST");
+      switchWorkspace("LIVE_HEALTH");
+      onSelectQuickPresetHealthy?.("PRESET_2014_V6_DSG");
       setCalloutTarget({
-        targetId: "CENTER_PANEL",
-        label: "HEALTHY CAR HEARTBEAT • TARGET & ACTUAL MATCH (8.45 BAR)",
+        targetId: "VEHICLE_INPUT_BAR",
+        label: "🚗 STAGE 01: VEHICLE INPUT BAR • 2014 AUDI S4 3.0T DSG",
         whyMatters:
-          "In Focused Mode, this green EKG oscilloscope confirms both pressure lines match at 8.45 Bar—zero fluid leaks or mechanical wear.",
+          "Enter any Year, Make, Model, Powertrain, and Transmission right in the Vehicle Input bar to calibrate mechanically valid faults.",
+        tone: "PHOSPHOR",
+      });
+    });
+    fireOnce("s2-switch-custom-ev", 19_200, () => {
+      playHexSound("EXORCISM_CHIME");
+      onApplyInlineVehicle?.({
+        yearMakeModel: "2024 Dual-Motor AWD EV",
+        powertrainType: "Full Electric (EV)",
+        transmissionType: "EV Single-Speed",
+      });
+      setCalloutTarget({
+        targetId: "VEHICLE_INPUT_BAR",
+        label: "⚡ SWITCHED TO 2024 DUAL-MOTOR EV • ZERO COMBUSTION / TCM FAULTS",
+        whyMatters:
+          "Calibrates to EV architecture—strictly excluding spark, fuel trim, exhaust, and multi-gear transmission codes!",
+        tone: "PHOSPHOR",
+      });
+    });
+    fireOnce("s2-switch-custom-f150", 24_200, () => {
+      playHexSound("EXORCISM_CHIME");
+      onApplyInlineVehicle?.({
+        yearMakeModel: "2022 Ford F-150 5.0L Automatic",
+        powertrainType: "Standard Gas",
+        transmissionType: "Standard Automatic",
+      });
+      setCalloutTarget({
+        targetId: "VEHICLE_INPUT_BAR",
+        label: "🛻 SWITCHED TO 2022 FORD F-150 5.0L AUTOMATIC • JL3Z OEM SPEC",
+        whyMatters:
+          "Loads Ford 5.0L V8 Automatic profile with JL3Z-... OEM part stamps in clean 🟢 PASS Sandbox state.",
+        tone: "PHOSPHOR",
+      });
+    });
+    fireOnce("s2-csv-override-lockout", 29_500, () => {
+      playHexSound("CLICK");
+      onLoadTopDockSampleCsv?.();
+      setCalloutTarget({
+        targetId: "SANDBOX_CONTROL_BAR",
+        label: "🔒 CSV FILE OVERWRITES & LOCKS OUT RANDOM SIMULATOR",
+        whyMatters:
+          "Data Source Priority Engine: Uploading or replaying a CSV log immediately overrides and locks out the Sandbox simulator!",
+        tone: "PHOSPHOR",
+      });
+    });
+    fireOnce("s2-scrub-csv-frame", 33_800, () => {
+      onSeekTopDockCsv?.(24);
+      setCalloutTarget({
+        targetId: "DOCK_CSV_SCRUBBER",
+        label: "📂 LIVE CSV TIMELINE SCRUBBER • OVERRIDING SIMULATOR",
+        whyMatters:
+          "Scrubs recorded CAN frames while keeping the random simulator locked until CSV Replay exits.",
+        tone: "PHOSPHOR",
+      });
+    });
+    fireOnce("s2-return-sandbox-f150", 37_800, () => {
+      playHexSound("CLICK");
+      onExitTopDockCsv?.();
+      onApplyInlineVehicle?.({
+        yearMakeModel: "2022 Ford F-150 5.0L Automatic",
+        powertrainType: "Standard Gas",
+        transmissionType: "Standard Automatic",
+      });
+      onSetDrivingSliders?.(DEFAULT_DRIVING_SLIDERS);
+      setCalloutTarget({
+        targetId: "SIMULATE_RANDOM_FAULT_BTN",
+        label: "🟢 RETURNED TO SANDBOX MODE • READY TO ROLL RANDOM ISSUE",
+        whyMatters:
+          "Exiting CSV Replay unlocks '🎲 Simulate Random Issue for 2022 Ford F-150' in clean 4/4 ECU PASS state.",
         tone: "PHOSPHOR",
       });
     });
 
-    // Scene 2 (0:16–0:34): Healthy Heartbeat & Plain-English KPI Tooltips (?)
-    fireOnce("s2-healthy-scope", 16_000, () => {
+    // Scene 3 (0:42–1:02): Clicks 🎲 Simulate Random Issue -> Rolls Car-Accurate Fault -> Lights Up Exact SVG X-Ray Node!
+    fireOnce("s3-click-random-roll-1", 42_000, () => {
+      playHexSound("CLICK");
+      switchWorkspace("LIVE_HEALTH");
+      onSetPipelineStageOverride?.("STAGE_02_XRAY");
+      const rolled = onRollRandomFault?.() ?? null;
+      if (!rolled) {
+        onInjectPrimaryFaultP0750();
+      }
+      const targetNode: CinemaDomTargetId =
+        rolled?.targetModule === "ECM"
+          ? "XRAY_NODE_ECM"
+          : rolled?.targetModule === "ABS"
+          ? "XRAY_NODE_ABS"
+          : rolled?.targetModule === "BCM"
+          ? "XRAY_NODE_BCM"
+          : "XRAY_NODE_TCM";
       onSpotlightPanel("OSCILLOSCOPE");
       setCalloutTarget({
-        targetId: "CENTER_PANEL",
-        label: "FOCUSED MODE • CLEAN GREEN EKG OSCILLOSCOPE",
-        whyMatters:
-          "Beginners see a calm, readable health monitor instead of raw hexadecimal bytes—as long as both traces overlap, your car is nominal.",
-        tone: "PHOSPHOR",
+        targetId: targetNode,
+        label: rolled
+          ? `🎲 ROLLED [${rolled.targetModule}] ${rolled.codeDisplayLabel} • ${rolled.oemPartNumber}`
+          : "🎲 ROLLED CAR-ACCURATE FAULT ON SVG X-RAY CHASSIS",
+        whyMatters: rolled
+          ? `${rolled.title} lights up [${rolled.targetModule}] on the SVG X-Ray Chassis & spikes the 60fps Heart Monitor!`
+          : "Highlights the exact affected ECU node on the Interactive SVG Vehicle X-Ray Chassis!",
+        tone: "CRIMSON",
       });
     });
-    fireOnce("s2-kpi-tooltip-pressure", 22_000, () => {
+    fireOnce("s3-focus-reroll-btn", 49_500, () => {
       playHexSound("CLICK");
-      onSetCinemaTooltipPid("22F40A");
       setCalloutTarget({
-        targetId: "CENTER_KPI_GRID",
-        label: "PLAIN-ENGLISH (?) TOOLTIP • TARGET VS. ACTUAL PRESSURE",
+        targetId: "REROLL_RANDOM_FAULT_BTN",
+        label: "🎲 RE-ROLL ANOTHER ISSUE • NEVER REPEATS PREVIOUS FAULT",
         whyMatters:
-          "Every KPI card includes a (?) badge explaining automotive terms like Target vs. Actual Pressure in plain everyday English.",
-        tone: "PHOSPHOR",
+          "Judges can re-roll consecutive non-repeating, mechanically valid faults tailored to the exact vehicle!",
+        tone: "CRIMSON",
       });
     });
-    fireOnce("s2-kpi-tooltip-stft", 26_800, () => {
-      playHexSound("CLICK");
-      onSetCinemaTooltipPid("0106");
+    fireOnce("s3-click-random-roll-2", 53_000, () => {
+      const rolled2 = onRollRandomFault?.() ?? null;
+      const nodeTag = rolled2?.targetModule ?? "TCM";
       setCalloutTarget({
-        targetId: "CENTER_KPI_GRID",
-        label: "PLAIN-ENGLISH (?) TOOLTIP • STFT % & TERMINAL 30 VOLTAGE",
-        whyMatters:
-          "Explains 'STFT %' ('How much extra fuel the computer is adding right now') and 'Terminal 30 Voltage' with healthy spec ranges.",
-        tone: "PHOSPHOR",
-      });
-    });
-    fireOnce("s2-kpi-tooltip-volt", 30_800, () => {
-      onSetCinemaTooltipPid("0142");
-    });
-
-    // Scene 3 (0:34–0:54): Fault Injection & Standard OBD-II Multi-Module Code Scanner
-    fireOnce("s3-inject-fault", 34_000, () => {
-      onSetCinemaTooltipPid(null);
-      onInjectPrimaryFaultP0750();
-      onSpotlightPanel("OSCILLOSCOPE");
-      setCalloutTarget({
-        targetId: "CENTER_PANEL",
-        label: "FAULT INJECTED • PRESSURE DROPS 8.45 -> 2.35 BAR",
-        whyMatters:
-          "A failing transmission shift solenoid drops hydraulic pressure to 2.35 Bar—turning the EKG trace crimson immediately.",
+        targetId: "XRAY_CHASSIS",
+        label: rolled2
+          ? `🔴 NEW NON-REPEATING ROLL: [${nodeTag}] ${rolled2.codeDisplayLabel} (${rolled2.oemPartNumber})`
+          : "🔴 SVG X-RAY NODE & 60FPS HEART MONITOR ANOMALY",
+        whyMatters: rolled2
+          ? `Dynamically switches X-Ray focus to [${nodeTag}] with brand-stamped ${rolled2.oemPartNumber} ($${rolled2.fairCostUsd.toLocaleString()} fair fix)!`
+          : "Updates the SVG X-Ray Chassis, 60fps Heart Monitor, Scanner, AI Autopsy & Escrow Vault in sync!",
         tone: "CRIMSON",
         showPressureDropPointer: true,
       });
     });
-    fireOnce("s3-open-obd-scanner", 39_000, () => {
+
+    // Scene 4 (1:02–1:22): 4-Module OBD-II Scanner + "Can I Drive This?" Safety Triage Banner
+    fireOnce("s4-sweep-4-modules", 62_000, () => {
       playHexSound("CLICK");
+      onSetPipelineStageOverride?.("STAGE_02_XRAY");
+      switchWorkspace("SCANNER_AI");
       onOpenObdScannerTabAndSweep();
       onSpotlightPanel("OBD_SCANNER");
       setCalloutTarget({
         targetId: "OBD_SCANNER_VIEW",
-        label: "4-MODULE OBD-II SWEEP • ECM / TCM / ABS / BCM",
+        label: "🔍 4-MODULE OBD-II SCANNER • ACTIVE ECU ISOLATED (3/4 🟢 PASS)",
         whyMatters:
-          "Polls 01 ECM (0x7E8), 02 TCM (0x7E9), 03 ABS (0x7EA) & 09 BCM (0x7EB), catching confirmed P0750 + Mode $02 Freeze-Frame.",
+          "Sweeps ECM, TCM, ABS & BCM—isolating the rolled fault on its exact ECU while the other 3 modules show 🟢 PASS!",
         tone: "CRIMSON",
       });
     });
-    fireOnce("s3-highlight-triage", 45_500, () => {
+    fireOnce("s4-highlight-triage", 73_000, () => {
       playHexSound("CLICK");
+      switchWorkspace("SCANNER_AI");
       setCalloutTarget({
         targetId: "SAFETY_TRIAGE_BANNER",
-        label: "🟡 CAUTION: CAN I DRIVE WITH THIS? • LIMP HOME RISK",
+        label: "🚦 CAN I DRIVE THIS? • AUTOMATED ROAD SAFETY TRIAGE",
         whyMatters:
-          "Answers every driver's #1 question immediately: safe for short low-speed trips to the shop, avoid highway towing or hard throttle.",
+          "Translates the rolled DTC & live sensor anomaly into SAFE, CAUTION, or DO NOT DRIVE guidance.",
         tone: "CRIMSON",
       });
     });
 
-    // Scene 4 (0:54–1:16): Vertex AI Autopsy & "Mechanic Quote Overcharge Detector"
-    fireOnce("s4-spotlight-ai-mechanic", 54_000, () => {
+    // Scene 5 (1:22–1:44): Vertex AI Mechanic + Shop Quote Overcharge Detector
+    fireOnce("s5-vertex-ai-mechanic", 82_000, () => {
       playHexSound("CLICK");
+      onSetPipelineStageOverride?.("STAGE_03_VERTEX_AI");
+      switchWorkspace("SCANNER_AI");
       onSpotlightPanel("VERTEX_AUTOPSY");
       setCalloutTarget({
         targetId: "RIGHT_NECROMANCER",
-        label: "GOOGLE CLOUD VERTEX AI • $1,480 FAIR OEM ESTIMATE",
+        label: "🧠 STAGE 03: GOOGLE CLOUD VERTEX AI MECHANIC AUTOPSY",
         whyMatters:
-          "Gemini 2.5 Flash decodes P0750 into OEM kit #0B5-398-009-F ($420 OEM parts + 6.5 hrs @ $163/hr = $1,480 fair total).",
+          "Gemini 2.5 Flash explains the newly rolled fault in plain English with brand-matched OEM part number & fair book cost.",
         tone: "CRIMSON",
       });
     });
-    fireOnce("s4-run-autopsy", 56_000, () => {
+    fireOnce("s5-run-autopsy", 83_500, () => {
       onTriggerVertexAutopsy();
     });
-    fireOnce("s4-quote-checker", 64_500, () => {
+    fireOnce("s5-ripoff-detector", 93_000, () => {
       playHexSound("CLICK");
-      onSetShopQuoteUsd(2450);
+      switchWorkspace("SCANNER_AI");
+      const currentCurse = callbacksRef.current.activeCurse;
+      const dealerQuote =
+        currentCurse?.dealerQuoteUsd ??
+        (currentCurse ? Math.round((currentCurse.estimatedCostUsd * 1.65) / 10) * 10 : 2450);
+      onSetShopQuoteUsd(dealerQuote);
       setCalloutTarget({
         targetId: "RIGHT_QUOTE_CHECKER",
-        label: "DEALER QUOTE $2,450 -> 🔴 OVERPRICED BY $970 (+65%)",
+        label: `🚨 SHOP OVERCHARGE DETECTOR • $${dealerQuote.toLocaleString()} DEALER QUOTE FLAGGED`,
         whyMatters:
-          "Audits any shop quote against OEM book parts ($420) + standard labor (6.5 hrs @ $163/hr), flagging a $970 dealer markup instantly!",
+          "Compares the dealership quote against OEM parts + standard book labor to protect drivers from markups!",
         tone: "CRIMSON",
       });
     });
 
-    // Scene 5 (1:16–1:36): Auto-Save Per Mile Escrow Vault & Mechanic Work Order
-    fireOnce("s5-spotlight-escrow", 76_000, () => {
+    // Scene 6 (1:44–2:06): FinTech Save-Per-Mile Vault + 25-Mile Commute + Kiro-Verified Printable Work Order
+    fireOnce("s6-fintech-vault", 104_000, () => {
       playHexSound("CLICK");
+      onSetPipelineStageOverride?.("STAGE_04_ESCROW_KIRO");
+      switchWorkspace("REPAIR_VAULT");
       onSpotlightPanel("ESCROW_VAULT");
       setCalloutTarget({
         targetId: "RIGHT_ESCROW_VAULT",
-        label: "AUTO-SAVE PER MILE VAULT • RATE SCALES AUTOMATICALLY",
+        label: "🏦 STAGE 04: AUTONOMOUS SAVE-PER-MILE FINTECH VAULT",
         whyMatters:
-          "As soon as P0750 is detected, HEXORCIST boosts per-mile withholding ($0.05/mi -> $2.90/mi) to pre-fund the repair while you drive.",
+          "Automatically scales per-mile withholding ($0.05/mi -> $2.90/mi) toward the $1,480 repair target.",
         tone: "PHOSPHOR",
       });
     });
-    fireOnce("s5-simulate-commute", 81_500, () => {
+    fireOnce("s6-simulate-commute", 109_500, () => {
+      switchWorkspace("REPAIR_VAULT");
       onSimulateCommuteEscrow();
       setCalloutTarget({
         targetId: "RIGHT_ESCROW_VAULT",
-        label: "25-MILE COMMUTE DEPOSITED • REPAIR DOLLARS LOCKED",
+        label: "SIMULATE 25-MILE COMMUTE • DOUBLE-ENTRY ESCROW",
         whyMatters:
-          "Simulating a 25-mile commute locks cent-exact repair funds directly into your autonomous FinTech escrow ledger.",
+          "Locks cent-exact repair funds into custodial escrow with Assets = Liabilities + Equity balanced.",
         tone: "PHOSPHOR",
       });
     });
-    fireOnce("s5-open-spec-sheet", 88_000, () => {
+    fireOnce("s6-open-work-order", 116_500, () => {
       playHexSound("CLICK");
       onSpotlightPanel(null);
       onSetMechanicSpecModalOpen(true);
       setCalloutTarget({
-        targetId: "MECHANIC_SPEC_MODAL",
-        label: "PRINTABLE MECHANIC SPEC SHEET & ESCROW PASS",
+        targetId: "KIRO_VALIDATOR_BADGE",
+        label: "✅ VERIFIED BY KIRO WORK-ORDER VALIDATOR",
         whyMatters:
-          "Bundles your VIN, Confirmed DTCs, Freeze-Frame, OEM Part # & Pre-Funded Escrow Pass so you can skip the $200 shop diagnostic fee.",
+          "Validates ISO 3779 VIN, SAE J2012 code, OEM parts/labor math & UDS checksum on the printable work order!",
         tone: "PHOSPHOR",
       });
     });
 
-    // Scene 6 (1:36–1:54): Clearing Codes (Mode $04) & Bidirectional UDS Exorcism
-    fireOnce("s6-prepare-mode04", 96_000, () => {
+    // Scene 7 (2:06–2:22): Clear Codes (Mode $04) -> Turns SVG Vehicle X-Ray Chassis nodes back to 🟢 PASS
+    fireOnce("s7-prepare-mode04", 126_000, () => {
       playHexSound("CLICK");
       onSetMechanicSpecModalOpen(false);
+      onSetPipelineStageOverride?.("STAGE_02_XRAY");
+      switchWorkspace("SCANNER_AI");
       onOpenObdScannerTabAndSweep();
       onSpotlightPanel("OBD_SCANNER");
       setCalloutTarget({
         targetId: "MODE_04_CLEAR_BTN",
-        label: "MODE $04 BROADCAST • CLEAR CODES & RESET MIL",
+        label: "CLEAR CODES / RESET ECU (MODE $04)",
         whyMatters:
-          "Once repaired, clicking Clear Codes sends SAE J1979 TX: 7DF 01 04 -> RX: 7E8 01 44 to wipe fault memory and turn off the Check Engine Light.",
+          "Broadcasts SAE J1979 TX: 7DF 01 04 -> RX: 7E8 01 44 across all 4 ECUs to clear fault memory and MIL.",
         tone: "PHOSPHOR",
       });
     });
-    fireOnce("s6-fire-mode04", 100_000, () => {
+    fireOnce("s7-fire-mode04", 130_500, () => {
       onClearObdMode04();
-      setCalloutTarget({
-        targetId: "OBD_SCANNER_VIEW",
-        label: "CHECK ENGINE LIGHT OFF • ALL 4 MODULES PASS",
-        whyMatters:
-          "ECM, TCM, ABS & BCM all return 🟢 PASS (0 Faults) immediately after the Mode $04 broadcast.",
-        tone: "PHOSPHOR",
-      });
-    });
-    fireOnce("s6-fire-uds-31", 104_500, () => {
-      onOpenUdsTerminalTab();
-      onSpotlightPanel("UDS_EXORCISM");
       onFireUdsExorcism31();
-      setCalloutTarget({
-        targetId: "CENTER_PANEL",
-        label: "BIDIRECTIONAL UDS EXORCISM • TX: 7E0 04 31 01 F4 0A",
-        whyMatters:
-          "Executes ISO 14229 solenoid kiss-point adaptation to confirm factory valve calibration.",
-        tone: "PHOSPHOR",
-      });
+      onSetDrivingSliders?.(DEFAULT_DRIVING_SLIDERS);
     });
-    fireOnce("s6-verify-green-scope", 109_000, () => {
+    fireOnce("s7-xray-restored-pass", 133_500, () => {
+      onSetPipelineStageOverride?.("STAGE_01_INGEST");
+      switchWorkspace("LIVE_HEALTH");
+      onSelectXRayModule?.("02_TCM");
       onOpenOscilloscopeTab();
       onSpotlightPanel("OSCILLOSCOPE");
       setCalloutTarget({
-        targetId: "CENTER_PANEL",
-        label: "100% VEHICLE HEALTH RESTORED • RATE BACK TO $0.05/MI",
+        targetId: "XRAY_CHASSIS",
+        label: "🟢 SVG VEHICLE X-RAY CHASSIS RESTORED • 4/4 ECUs PASS",
         whyMatters:
-          "Both green oscilloscope traces lock back onto 8.45 Bar and per-mile savings drop back to $0.05/mi.",
+          "[ECM], [TCM], [ABS] & [BCM] return to Emerald 🟢 PASS and 60fps hydraulic pressure locks back onto 8.45 Bar!",
         tone: "PHOSPHOR",
       });
     });
 
-    // Scene 7 (1:54–2:16): Universal VIN Decoder, Engineer Pro Mode, .DBC Matrix & Dyno Pull
-    fireOnce("s7-pro-mode", 114_000, () => {
+    // Scene 8 (2:22–2:45): Engineer Pro & Kiro Verification Suite (.DBC Matrix, Virtual Road Dyno, Kiro Specs + PBTs)
+    fireOnce("s8-dbc-matrix", 142_000, () => {
       playHexSound("CLICK");
+      onSetPipelineStageOverride?.("STAGE_04_ESCROW_KIRO");
+      switchWorkspace("ENGINEER_KIRO", "CAN_DBC");
       onSwitchToEngineerProMode();
-      onSpotlightPanel("FAULT_HEX");
-      setCalloutTarget({
-        targetId: "LEFT_HEX_STREAM",
-        label: "ENGINEER PRO MODE • LIVE 25HZ RAW CAN NETWORK",
-        whyMatters:
-          "Flip to Engineer Pro Mode to inspect raw 25Hz ISO 15765-4 hexadecimal frames and XOR checksums.",
-        tone: "PHOSPHOR",
-      });
-    });
-    fireOnce("s7-dbc-sig-0", 117_200, () => {
-      playHexSound("CLICK");
       onSpotlightPanel(null);
       onOpenDbcMatrixModal(0);
       setCalloutTarget({
         targetId: "MODAL_DBC_MATRIX",
-        label: "64-BIT .DBC SIGNAL MATRIX • BIT-LEVEL DECODING",
+        label: "🔬 ENGINEER PRO • 64-BIT .DBC SIGNAL BIT MATRIX",
         whyMatters:
-          "Highlights exact bit positions inside 64-bit OpenDBC payloads for clutch pressure, fluid temp, and RPM.",
+          "Inspects live bit-packed OpenDBC signals across 25Hz ISO 15765-4 hexadecimal frames.",
         tone: "PHOSPHOR",
       });
     });
-    fireOnce("s7-dbc-sig-2", 119_500, () => {
+    fireOnce("s8-dbc-sig-2", 145_000, () => {
       onOpenDbcMatrixModal(2);
     });
-    fireOnce("s7-csv-scrubber", 122_000, () => {
+    fireOnce("s8-virtual-dyno", 148_000, () => {
       playHexSound("CLICK");
-      onSwitchModalToCsvReplayAndLoad();
-      setCalloutTarget({
-        targetId: "MODAL_CSV_SCRUBBER",
-        label: "ISO 15765-4 CSV REPLAY • 2X TIMELINE SCRUBBER",
-        whyMatters:
-          "Scrub recorded 100-row highway telemetry logs frame by frame to isolate intermittent anomalies.",
-        tone: "PHOSPHOR",
-      });
-    });
-    fireOnce("s7-open-vin", 126_200, () => {
-      onCloseHardwareModalAndResumeSim();
-      playHexSound("CLICK");
-      onOpenLiveNhtsaVinModal();
-      setCalloutTarget({
-        targetId: "VIN_MODAL_CARD",
-        label: "LIVE US DOT NHTSA 17-DIGIT VIN CALIBRATION",
-        whyMatters:
-          "Decode any real 17-digit ISO 3779 VIN via US DOT vPIC to bind factory displacement, mass & horsepower.",
-        tone: "PHOSPHOR",
-      });
-    });
-    fireOnce("s7-bind-vin-dyno", 130_000, () => {
-      playHexSound("CLICK");
-      onBindNhtsaVinAndPrepareDyno();
+      switchWorkspace("ENGINEER_KIRO", "DYNO_UDS");
       onSpotlightPanel("ROAD_DYNO");
+      onExecuteWotDynoPull();
       setCalloutTarget({
-        targetId: "CENTER_PANEL",
-        label: "VIRTUAL ROAD DYNO • WOT HORSEPOWER & TORQUE PULL",
+        targetId: "ROAD_DYNO_CARD",
+        label: "🏎️ LIVE VIRTUAL ROAD DYNO PULL • WHP & TORQUE",
         whyMatters:
-          "Executes a physics-calibrated 2,000–7,000 RPM Wide-Open-Throttle pull comparing healthy vs. actual WHP.",
+          "Executes a physics-calibrated 2,000–7,000 RPM Wide-Open-Throttle pull graphing healthy vs. actual WHP.",
         tone: "PHOSPHOR",
       });
     });
-    fireOnce("s7-wot-pull", 130_800, () => {
-      onExecuteWotDynoPull();
-    });
-
-    // Scene 8 (2:16–2:32): Kiro Architecture & Property-Based Testing Proofs
-    fireOnce("s8-open-kiro", 136_000, () => {
+    fireOnce("s8-kiro-pbt-suite", 153_500, () => {
       onSpotlightPanel(null);
+      switchWorkspace("ENGINEER_KIRO", "KIRO_PROOFS");
       onOpenKiroProofsDrawer();
       setCalloutTarget({
         targetId: "KIRO_PBT_CARD",
-        label: "KIRO EARS SPECS, AGENT HOOKS, MCP & FAST-CHECK PBT",
+        label: "🛡️ KIRO EARS SPECS, AGENT HOOKS & FAST-CHECK PBTs",
         whyMatters:
-          "Verifies CAN round-trips, SAE J2012 DTC bijections, fair-price audits & monotonic escrow math across thousands of random inputs.",
+          "Runs 280+ live property-based invariant checks across CAN round-trips, ISO 3779 VINs & escrow math!",
         tone: "PHOSPHOR",
       });
     });
-    fireOnce("s8-closing-card", 145_500, () => {
+    fireOnce("s8-closing-card", 159_500, () => {
       playHexSound("EXORCISM_CHIME");
-      stopChillBackgroundMusic(5.2);
+      stopChillBackgroundMusic(5.0);
       setCalloutTarget(null);
       onCloseAllOverlaysForFinale();
+      onSetPipelineStageOverride?.(null);
+      switchWorkspace("LIVE_HEALTH");
     });
     fireOnce("s8-finish", TOTAL_CINEMA_DURATION_MS, () => {
       stopChillBackgroundMusic(0.25);
@@ -846,13 +994,16 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
     elapsedMs,
     isRecording,
     isRunning,
+    onApplyInlineVehicle,
     onBindNhtsaVinAndPrepareDyno,
     onClearObdMode04,
     onCloseAllOverlaysForFinale,
     onCloseHardwareModalAndResumeSim,
     onExecuteWotDynoPull,
+    onExitTopDockCsv,
     onFireUdsExorcism31,
     onInjectPrimaryFaultP0750,
+    onLoadTopDockSampleCsv,
     onOpenDbcMatrixModal,
     onOpenKiroProofsDrawer,
     onOpenLiveNhtsaVinModal,
@@ -860,9 +1011,18 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
     onOpenOscilloscopeTab,
     onOpenUdsTerminalTab,
     onResetNominalFocused,
+    onRollRandomFault,
     onRunningChange,
+    onSeekTopDockCsv,
+    onSelectQuickPresetHealthy,
+    onSelectXRayModule,
+    onSetBentoCockpitView,
     onSetCinemaTooltipPid,
+    onSetDrivingSliders,
     onSetMechanicSpecModalOpen,
+    onSetOwnCarModalOpen,
+    onSetPipelineStageOverride,
+    onSetVehiclePopoverOpen,
     onSetShopQuoteUsd,
     onSimulateCommuteEscrow,
     onSpotlightPanel,
@@ -870,7 +1030,9 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
     onSwitchToEngineerProMode,
     onTriggerVertexAutopsy,
     stopMediaRecorderAndDownload,
+    switchWorkspace,
   ]);
+
   const handleJumpToScene = (targetSceneNumber: CinemaSceneNumber) => {
     const targetCfg = CINEMA_SCENES.find((s) => s.sceneNumber === targetSceneNumber);
     if (!targetCfg) return;
@@ -881,33 +1043,31 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
 
     const allCueTimestamps: Array<[string, number]> = [
       ["s1-init", 0],
-      ["s1-dissolve-dashboard", 15_000],
-      ["s2-healthy-scope", 16_000],
-      ["s2-kpi-tooltip-pressure", 22_000],
-      ["s2-kpi-tooltip-stft", 26_800],
-      ["s2-kpi-tooltip-volt", 30_800],
-      ["s3-inject-fault", 34_000],
-      ["s3-open-obd-scanner", 39_000],
-      ["s3-highlight-triage", 45_500],
-      ["s4-spotlight-ai-mechanic", 54_000],
-      ["s4-run-autopsy", 56_000],
-      ["s4-quote-checker", 64_500],
-      ["s5-spotlight-escrow", 76_000],
-      ["s5-simulate-commute", 81_500],
-      ["s5-open-spec-sheet", 88_000],
-      ["s6-prepare-mode04", 96_000],
-      ["s6-fire-mode04", 100_000],
-      ["s6-fire-uds-31", 104_500],
-      ["s6-verify-green-scope", 109_000],
-      ["s7-pro-mode", 114_000],
-      ["s7-dbc-sig-0", 117_200],
-      ["s7-dbc-sig-2", 119_500],
-      ["s7-csv-scrubber", 122_000],
-      ["s7-open-vin", 126_200],
-      ["s7-bind-vin-dyno", 130_000],
-      ["s7-wot-pull", 130_800],
-      ["s8-open-kiro", 136_000],
-      ["s8-closing-card", 145_500],
+      ["s2-spotlight-dock", 15_000],
+      ["s2-load-sample-csv", 19_000],
+      ["s2-scrub-csv-frame", 22_800],
+      ["s2-open-own-car-vin", 26_000],
+      ["s2-select-v6-dsg", 33_000],
+      ["s3-healthy-xray", 38_000],
+      ["s3-sliders-step-1", 44_500],
+      ["s3-sliders-step-2", 48_500],
+      ["s3-tcm-node-fault", 52_000],
+      ["s4-sweep-4-modules", 58_000],
+      ["s4-highlight-triage", 70_000],
+      ["s5-vertex-ai-mechanic", 80_000],
+      ["s5-run-autopsy", 81_500],
+      ["s5-ripoff-detector", 92_000],
+      ["s6-fintech-vault", 104_000],
+      ["s6-simulate-commute", 109_500],
+      ["s6-open-work-order", 116_500],
+      ["s7-prepare-mode04", 126_000],
+      ["s7-fire-mode04", 130_500],
+      ["s7-xray-restored-pass", 133_500],
+      ["s8-dbc-matrix", 142_000],
+      ["s8-dbc-sig-2", 145_000],
+      ["s8-virtual-dyno", 148_000],
+      ["s8-kiro-pbt-suite", 153_500],
+      ["s8-closing-card", 159_500],
       ["s8-finish", TOTAL_CINEMA_DURATION_MS],
     ];
 
@@ -920,18 +1080,32 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
     firedCuesRef.current = preFired;
 
     onCloseAllOverlaysForFinale();
+    onExitTopDockCsv?.();
+    onSetBentoCockpitView?.(false);
+    onSetVehiclePopoverOpen?.(false);
+    onSetOwnCarModalOpen?.(false);
     onSetCinemaTooltipPid(null);
     onSetMechanicSpecModalOpen(false);
+    onSetDrivingSliders?.(DEFAULT_DRIVING_SLIDERS);
     onResetNominalFocused();
-    if (targetSceneNumber === 4 || targetSceneNumber === 5 || targetSceneNumber === 6) {
+    if (
+      targetSceneNumber === 4 ||
+      targetSceneNumber === 5 ||
+      targetSceneNumber === 6 ||
+      targetSceneNumber === 7
+    ) {
       onInjectPrimaryFaultP0750();
     }
-    if (targetSceneNumber === 5 || targetSceneNumber === 6) {
+    if (targetSceneNumber === 6 || targetSceneNumber === 7) {
       onTriggerVertexAutopsy();
     }
-    if (targetSceneNumber === 6) {
+    if (targetSceneNumber === 7) {
       onSimulateCommuteEscrow();
     }
+    switchWorkspace(
+      getWorkspaceTabForScene(targetSceneNumber),
+      targetSceneNumber === 8 ? "CAN_DBC" : "CAN_DBC"
+    );
 
     setElapsedMs(targetCfg.startMs);
     setPaused(false);
@@ -1000,8 +1174,8 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
     return Math.min(100, Math.max(0, ((elapsedMs - currentScene.startMs) / span) * 100));
   }, [currentScene, elapsedMs]);
 
-  const showOpeningTitleCard = isRunning && elapsedMs < 15_000;
-  const showClosingTitleCard = isRunning && elapsedMs >= 145_500;
+  const showOpeningTitleCard = isRunning && elapsedMs < 14_600;
+  const showClosingTitleCard = isRunning && elapsedMs >= 159_500;
   const activeTone: "PHOSPHOR" | "CRIMSON" =
     calloutTarget?.tone ?? currentScene.accentTone;
 
@@ -1043,30 +1217,30 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.22 }}
-            className="fixed top-[74px] left-1/2 z-[68] w-[calc(100%-1.5rem)] max-w-4xl -translate-x-1/2 rounded-2xl border border-[#00FF9D]/75 bg-[#06070A]/96 p-4 font-mono text-white shadow-[0_0_48px_rgba(0,255,157,0.3)] backdrop-blur-2xl"
+            className="fixed top-[74px] left-1/2 z-[68] w-[calc(100%-1.5rem)] max-w-3xl -translate-x-1/2 rounded-2xl border border-white/10 bg-zinc-900/95 p-5 text-zinc-100 shadow-2xl backdrop-blur-xl"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#00FF9D]">
-                  <Clapperboard className="h-4 w-4" />
-                  <span>Newcomer-Friendly Cinema Pitch Director (2:32 • Chill Ambient Music)</span>
+                <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-white">
+                  <Clapperboard className="h-4 w-4 text-violet-400" />
+                  <span>Cinema Pitch Director (2:45 • Obsidian OS &amp; Chimera Pipeline Tour)</span>
                 </div>
-                <p className="text-[11px] text-slate-300">
-                  Self-running 8-scene walkthrough (~2:32) showcasing Plain-English KPI Tooltips, 4-Module OBD-II Code Scanner, Road Safety Triage, Vertex AI Quote Auditor, Auto-Save Vault, Printable Mechanic Spec Sheet, Pro Mode &amp; Kiro PBT proofs.
+                <p className="text-xs text-zinc-400">
+                  Self-running 8-scene tour showcasing the Top Hardware/CSV Dock, Interactive SVG Vehicle X-Ray Chassis, Vertex AI Ripoff Detector, FinTech Vault &amp; Kiro PBT Suite.
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={handleToggleMusic}
-                  className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-bold transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
                     musicEnabled
-                      ? "border-[#00FF9D]/60 bg-[#00FF9D]/15 text-[#00FF9D]"
-                      : "border-white/15 bg-white/5 text-slate-400 hover:text-white"
+                      ? "border-emerald-500/35 bg-emerald-500/10 text-emerald-300"
+                      : "border-white/10 bg-zinc-800 text-zinc-400 hover:text-white"
                   }`}
                 >
                   <Music className="h-3.5 w-3.5" />
-                  <span>🎵 Music: {musicEnabled ? "ON" : "OFF"}</span>
+                  <span>Music: {musicEnabled ? "ON" : "OFF"}</span>
                 </button>
                 <button
                   type="button"
@@ -1074,7 +1248,7 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
                     setRecorderStatus(null);
                     onCloseLauncher();
                   }}
-                  className="rounded-lg border border-white/15 bg-white/5 p-1.5 text-slate-300 hover:border-white/35 hover:text-white cursor-pointer"
+                  className="rounded-xl border border-white/10 bg-zinc-800/70 p-2 text-zinc-400 hover:text-white cursor-pointer"
                   aria-label="Close Cinema Pitch Launcher"
                 >
                   <X className="h-4 w-4" />
@@ -1082,23 +1256,23 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
               </div>
             </div>
 
-            <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={handleStartVisualAutoPilot}
-                className="flex items-center justify-center gap-2 rounded-xl bg-[#00FF9D] px-4 py-3 text-xs font-bold text-[#06070A] shadow-[0_0_24px_rgba(0,255,157,0.32)] transition hover:bg-[#00FF9D]/90 cursor-pointer"
+                className="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-xs font-semibold text-zinc-950 shadow-sm transition hover:bg-emerald-400 cursor-pointer"
               >
                 <Play className="h-4 w-4 fill-current shrink-0" />
-                <span>▶ Play 2:32 Cinema Pitch (Auto-Pilot + Chill Music)</span>
+                <span>Play 2:45 Cinema Pitch (Auto-Pilot)</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => void handleStartRecordAndRun()}
-                className="flex items-center justify-center gap-2 rounded-xl border border-[#FF1E42]/80 bg-[#FF1E42]/20 px-4 py-3 text-xs font-bold text-white shadow-[0_0_24px_rgba(255,30,66,0.28)] transition hover:bg-[#FF1E42]/30 cursor-pointer"
+                className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/15 px-4 py-3 text-xs font-semibold text-rose-200 transition hover:bg-rose-500/25 cursor-pointer"
               >
                 <Video className="h-4 w-4 text-[#FF1E42] shrink-0" />
-                <span>🔴 Record Tab &amp; Run 2:32 Pitch (Exports .webm)</span>
+                <span>🔴 Record Tab &amp; Run 2:45 Pitch (Exports .webm)</span>
               </button>
             </div>
 
@@ -1145,21 +1319,21 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
                 <Sparkles className="h-3.5 w-3.5" />
                 <span>
                   {showOpeningTitleCard
-                    ? "ZERO AUTOMOTIVE BACKGROUND NEEDED • 2:32 GUIDED STORY"
-                    : "KIROWEEN 2026 • KIRO EARS SPECS & FAST-CHECK PROOFS VERIFIED"}
+                    ? "KIROWEEN FRANKENSTEIN CATEGORY • 2:45 OBSIDIAN OS TOUR"
+                    : "KIROWEEN 2026 • KIRO EARS SPECS & WORK-ORDER VALIDATOR VERIFIED"}
                 </span>
               </div>
 
               <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white drop-shadow-[0_0_28px_rgba(0,255,157,0.3)]">
                 {showOpeningTitleCard
-                  ? "Meet HEXORCIST: Your Car's Translator, AI Mechanic, Fair-Price Auditor & Automatic Repair Vault"
-                  : "HEXORCIST — Car Scanner, Fair-Price Auditor & Repair Vault in Perfect Sync"}
+                  ? "HEXORCIST: OBD-II Hardware + Interactive SVG X-Ray + Vertex AI + FinTech Escrow"
+                  : "HEXORCIST Obsidian OS — Frankenstein Automotive Chimera"}
               </h1>
 
               <div className="mx-auto max-w-4xl rounded-2xl border border-[#00FF9D]/45 bg-[#0A0F18]/90 px-5 py-3.5 text-xs sm:text-base leading-relaxed text-slate-100 shadow-[0_0_40px_rgba(0,255,157,0.14)]">
                 {showOpeningTitleCard
-                  ? "When your Check Engine Light turns on, your car speaks in cryptic trouble codes, dealers hand you an overpriced quote, and your bank account isn't ready. HEXORCIST translates, audits, and funds the repair automatically."
-                  : "Every calculation—from 4-module OBD-II & 25Hz CAN decoding to fair-price auditing and cent-exact repair savings—is mathematically verified with Kiro EARS Specifications, Agent Hooks, US DOT NHTSA MCP, and Property-Based Testing."}
+                  ? "Stitching real SAE J1979 OBD-II & CSV telemetry, an Interactive SVG Vehicle X-Ray Chassis, Google Cloud Vertex AI quote auditing, and Double-Entry Save-Per-Mile FinTech Escrow."
+                  : "Every byte, 4-module ECU sweep, OEM overcharge audit, Kiro-Verified Printable Work Order, and cent of escrow math is verified with Kiro EARS Specs & Property-Based Testing."}
               </div>
 
               {showOpeningTitleCard ? (
@@ -1281,10 +1455,16 @@ export function DemoVideoDirector(props: DemoVideoDirectorProps) {
                       <AlertTriangle className="h-4 w-4 shrink-0 text-[#FF1E42]" />
                       <div className="text-left">
                         <div className="text-xs font-black tracking-wide text-white">
-                          ⚠️ Pressure Drop Detected!
+                          ⚠️{" "}
+                          {activeCurse
+                            ? `Telemetry Anomaly (${activeCurse.codeDisplayLabel ?? activeCurse.dtcCode})!`
+                            : "Telemetry Anomaly Detected!"}
                         </div>
                         <div className="text-[10px] font-bold text-[#FF6B81]">
-                          Actual: 2.35 Bar vs. Needed: 8.45 Bar
+                          {activeCurse?.symptomSummary ??
+                            `OEM Part ${activeCurse?.oemPartNumber ?? "Active"} • Fair Fix $${(
+                              activeCurse?.estimatedCostUsd ?? 890
+                            ).toLocaleString()}`}
                         </div>
                       </div>
                     </div>

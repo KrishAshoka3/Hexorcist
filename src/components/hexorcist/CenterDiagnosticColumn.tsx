@@ -28,6 +28,11 @@ import {
   VehicleSoulPreset,
 } from "@/lib/obd-hex-engine";
 import { PLAIN_ENGLISH_PID_TOOLTIPS } from "@/lib/obd-scanner-qol";
+import {
+  DEFAULT_DRIVING_SLIDERS,
+  DrivingStressSlidersState,
+} from "@/lib/custom-car-and-sliders";
+import { InteractiveDrivingStressBar } from "./InteractiveDrivingStressBar";
 import { StandardObdScannerPanel } from "@/components/StandardObdScannerModal";
 import { playHexSound } from "@/lib/sound-fx";
 
@@ -81,6 +86,11 @@ interface CenterDiagnosticColumnProps {
   onCastCurse?: (curse: MechanicalCursePreset) => void;
   onOpenMechanicSpecSheet?: () => void;
   cinemaTooltipPid?: PidKey | null;
+  drivingSliders?: DrivingStressSlidersState;
+  onChangeDrivingSliders?: (next: DrivingStressSlidersState) => void;
+  onResetDrivingSliders?: () => void;
+  escrowRateCentsPerMile?: number;
+  stressWarnings?: string[];
 }
 
 const EIGHT_GAUGE_PIDS: PidKey[] = [
@@ -119,6 +129,11 @@ export function CenterDiagnosticColumn({
   onCastCurse,
   onOpenMechanicSpecSheet,
   cinemaTooltipPid = null,
+  drivingSliders = DEFAULT_DRIVING_SLIDERS,
+  onChangeDrivingSliders,
+  onResetDrivingSliders,
+  escrowRateCentsPerMile = 5,
+  stressWarnings = [],
 }: CenterDiagnosticColumnProps) {
   const [showAllChannelsInFocused, setShowAllChannelsInFocused] = useState(false);
   const [pinnedTooltipPid, setPinnedTooltipPid] = useState<PidKey | null>(null);
@@ -175,7 +190,7 @@ export function CenterDiagnosticColumn({
           }`}
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">🔍 OBD-II Code Scanner (ECM / TCM)</span>
+          <span className="truncate">🔍 OBD-II Code Scanner (ECM / TCM / ABS / BCM)</span>
         </button>
 
         <button
@@ -298,6 +313,16 @@ export function CenterDiagnosticColumn({
               </ResponsiveContainer>
             </div>
           </div>
+
+          {onChangeDrivingSliders && (
+            <InteractiveDrivingStressBar
+              sliders={drivingSliders}
+              onChangeSliders={onChangeDrivingSliders}
+              onResetSliders={onResetDrivingSliders}
+              escrowRateCentsPerMile={escrowRateCentsPerMile}
+              warnings={stressWarnings}
+            />
+          )}
 
           {/* Progressive Disclosure KPI Cards */}
           <div data-cinema-target="CENTER_KPI_GRID" className="space-y-2.5">

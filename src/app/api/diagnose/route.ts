@@ -16,6 +16,7 @@ export interface DiagnoseRequestPayload {
   dtcCode?: string;
   telemetrySnapshot?: Record<string, number>;
   customSoul?: VehicleSoulPreset;
+  activeCurse?: import("@/lib/obd-hex-engine").MechanicalCursePreset | null;
 }
 
 export interface DiagnoseResponsePayload {
@@ -39,14 +40,20 @@ function buildFallbackAutopsy(
   rawCanFrame: string,
   dtcCode: string,
   project: string,
-  location: string
+  location: string,
+  explicitCurse?: import("@/lib/obd-hex-engine").MechanicalCursePreset | null
 ): DiagnoseResponsePayload {
   const safeDtc = /^[PCBU][0-3][0-9A-F]{3}$/i.test(dtcCode.trim())
     ? dtcCode.trim().toUpperCase()
-    : soul.curses[0].dtcCode;
+    : explicitCurse?.dtcCode ?? soul.curses[0].dtcCode;
 
   const curse =
-    soul.curses.find((c) => c.dtcCode.toUpperCase() === safeDtc) ?? soul.curses[0];
+    (explicitCurse && explicitCurse.dtcCode.toUpperCase() === safeDtc
+      ? explicitCurse
+      : null) ??
+    explicitCurse ??
+    soul.curses.find((c) => c.dtcCode.toUpperCase() === safeDtc) ??
+    soul.curses[0];
   const parsed = parseRawCANFrame(rawCanFrame);
   const bitmask = inspectDTCBitmask(safeDtc);
 
@@ -82,7 +89,7 @@ export async function POST(req: NextRequest) {
   }
 
   const soul: VehicleSoulPreset =
-    body.vehicleId === "CUSTOM_VIN_SOUL" && body.customSoul?.curses?.length
+    body.customSoul?.curses?.length
       ? body.customSoul
       : body.vehicleId && body.vehicleId in VEHICLE_SOUL_PRESETS
       ? VEHICLE_SOUL_PRESETS[body.vehicleId as VehicleArchitectureId]
@@ -97,15 +104,17 @@ export async function POST(req: NextRequest) {
     rawCanFrame,
     dtcCode,
     project,
-    location
+    location,
+    body.activeCurse
   );
 
   try {
     const ai = new GoogleGenAI({ vertexai: true, project, location });
     const parsed = parseRawCANFrame(rawCanFrame);
     const prompt = [
-      `You are HEXORCIST, an automotive CAN-Bus (SAE J1979) and ISO 14229 UDS diagnostic necromancer.`,
-      `Powertrain: ${soul.codename} (${soul.yearMakeModel})`,
+      `You are HEXORCIST, an automotive CAN-Bus (SAE J1979) and ISO 14229 UDS diagnostic necromancer that explains car faults clearly for everyday drivers while giving exact OEM part numbers and fair repair pricing.`,
+      `Vehicle: ${soul.yearMakeModel} (${soul.codename})`,
+      `Drivetrain Spec: ${soul.engineSummary}`,
       `VIN: ${vin} | Active DTC: ${dtcCode} (${fallback.dtcBitmaskHex})`,
       `Raw CAN Hex Frame: ${rawCanFrame}`,
       parsed.valid ? `Decoded PID: ${parsed.name} = ${parsed.value} ${parsed.unit}` : "",

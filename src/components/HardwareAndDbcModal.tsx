@@ -89,23 +89,23 @@ export function CsvPlaybackScrubberBar({
   const hasFaultNow = current.activeDtc !== "NONE";
 
   return (
-    <div className="rounded-xl border border-[#FFB800]/45 bg-[#0A0D14]/95 p-3.5 font-mono shadow-2xl space-y-2.5">
+    <div className="rounded-2xl border border-white/[0.08] bg-zinc-900/60 p-5 shadow-xl space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <FileSpreadsheet className="h-4 w-4 text-[#FFB800]" />
-          <span className="text-xs font-bold uppercase tracking-wider text-[#FFB800]">
-            CSV Telemetry Timeline Scrubber
+        <div className="flex flex-wrap items-center gap-2">
+          <FileSpreadsheet className="h-4 w-4 text-amber-400" />
+          <span className="text-xs font-semibold text-zinc-100">
+            CSV Telemetry Scrubber
           </span>
-          <span className="rounded bg-white/5 px-2 py-0.5 text-[10px] text-slate-300">
+          <span className="rounded-lg bg-zinc-950/80 px-2 py-0.5 font-mono text-[11px] text-zinc-400">
             {sourceLabel} ({frames.length} frames)
           </span>
           {hasFaultNow ? (
-            <span className="rounded border border-[#FF1E42]/60 bg-[#FF1E42]/15 px-2 py-0.5 text-[10px] font-bold text-[#FF6B81]">
-              ACTIVE DTC: {current.activeDtc}
+            <span className="rounded-full border border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-rose-300">
+              DTC: {current.activeDtc}
             </span>
           ) : (
-            <span className="rounded border border-[#00FF9D]/40 bg-[#00FF9D]/10 px-2 py-0.5 text-[10px] text-[#00FF9D]">
-              DTC: NONE (NOMINAL)
+            <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 font-mono text-[10px] font-medium text-emerald-300">
+              Nominal
             </span>
           )}
         </div>
@@ -113,16 +113,16 @@ export function CsvPlaybackScrubberBar({
           <button
             type="button"
             onClick={onTogglePlay}
-            className="flex items-center gap-1 rounded-md bg-[#00FF9D] px-2.5 py-1 text-[11px] font-bold text-[#06070A] hover:bg-[#00FF9D]/90 cursor-pointer"
+            className="flex items-center gap-1 rounded-xl bg-emerald-500 px-3 py-1 text-xs font-semibold text-zinc-950 hover:bg-emerald-400 cursor-pointer"
           >
             {playing ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-            <span>{playing ? "PAUSE" : "PLAY"}</span>
+            <span>{playing ? "Pause" : "Play"}</span>
           </button>
 
           <button
             type="button"
             onClick={() => onSeek(0)}
-            className="rounded-md border border-white/15 bg-white/5 p-1 text-slate-300 hover:text-white cursor-pointer"
+            className="rounded-xl border border-white/10 bg-zinc-800 p-1.5 text-zinc-300 hover:text-white cursor-pointer"
             title="Restart Log"
           >
             <RotateCcw className="h-3.5 w-3.5" />
@@ -133,10 +133,10 @@ export function CsvPlaybackScrubberBar({
               key={`${mult}-${idx}`}
               type="button"
               onClick={() => onChangeSpeed(mult)}
-              className={`rounded-md border px-2 py-1 text-[11px] font-bold transition cursor-pointer ${
+              className={`rounded-xl border px-2.5 py-1 font-mono text-xs font-medium transition cursor-pointer ${
                 speed === mult
-                  ? "border-[#00E5FF] bg-[#00E5FF]/20 text-[#00E5FF]"
-                  : "border-white/10 bg-white/5 text-slate-400 hover:text-white"
+                  ? "border-violet-500/40 bg-violet-500/15 text-violet-200"
+                  : "border-white/[0.08] bg-zinc-950/60 text-zinc-400 hover:text-white"
               }`}
             >
               {mult}x
@@ -147,10 +147,10 @@ export function CsvPlaybackScrubberBar({
             <button
               type="button"
               onClick={() => onSeek(firstFaultIdx)}
-              className="flex items-center gap-1 rounded-md border border-[#FF1E42]/50 bg-[#FF1E42]/15 px-2 py-1 text-[10px] font-bold text-[#FF6B81] hover:bg-[#FF1E42]/25 cursor-pointer"
+              className="flex items-center gap-1 rounded-xl border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-medium text-rose-300 hover:bg-rose-500/20 cursor-pointer"
             >
               <FastForward className="h-3 w-3" />
-              <span>Jump Fault @ {(frames[firstFaultIdx].timestampMs / 1000).toFixed(1)}s</span>
+              <span>Fault @ {(frames[firstFaultIdx].timestampMs / 1000).toFixed(1)}s</span>
             </button>
           )}
 
@@ -158,9 +158,9 @@ export function CsvPlaybackScrubberBar({
             <button
               type="button"
               onClick={onExitReplay}
-              className="rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[10px] text-slate-300 hover:border-[#00FF9D]/50 hover:text-[#00FF9D] cursor-pointer"
+              className="rounded-xl border border-white/10 bg-zinc-800 px-2.5 py-1 text-[11px] text-zinc-300 hover:text-white cursor-pointer"
             >
-              Exit CSV -&gt; 25Hz Sim
+              Exit CSV
             </button>
           )}
         </div>

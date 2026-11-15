@@ -383,7 +383,6 @@ export function validateUdsResponse(
 
   // Check for Negative Response (0x7F)
   if (responseSid === 0x7f) {
-    const requestedSid = responseBytes.length >= 2 ? (responseBytes[1] & 0xff) : 0;
     const nrc = responseBytes.length >= 3 ? (responseBytes[2] & 0xff) : 0;
     const nrcDesc = UDS_NRC_MAP[nrc] || `Unknown NRC 0x${nrc.toString(16).toUpperCase().padStart(2, "0")}`;
 

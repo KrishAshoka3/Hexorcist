@@ -634,10 +634,19 @@ export function calculateEscrowRateCents(
   return 5 + Math.floor(1.85 * s + 0.011 * s * s) + 45 * dtcs;
 }
 
+export type CurseTargetModuleId = "01_ECM" | "02_TCM" | "03_ABS" | "09_BCM";
+export type CurseSafetyTriageLevel = "SAFE" | "CAUTION" | "DO NOT DRIVE";
+
 export interface MechanicalCursePreset {
   id: string;
   name: string;
   dtcCode: string;
+  companionDtcCode?: string;
+  codeDisplayLabel?: string;
+  targetModuleId?: CurseTargetModuleId;
+  dealerQuoteUsd?: number;
+  safetyTriageLevel?: CurseSafetyTriageLevel;
+  symptomSummary?: string;
   severityScore: number; // 0..100
   powerLossPct: number; // 0..65
   targetPid: PidKey;
